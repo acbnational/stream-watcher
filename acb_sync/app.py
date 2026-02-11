@@ -1,5 +1,4 @@
-"""
-Main application controller for Stream Watcher.
+"""Main application controller for Stream Watcher.
 
 Ties together configuration, file watching, copying, the system tray,
 global hotkeys, screen-reader notifications, and the accessible tkinter UI.
@@ -15,11 +14,10 @@ from pathlib import Path
 
 from acb_sync import __app_name__, __version__
 from acb_sync.config import Config, get_log_path
-from acb_sync.copier import CopyRecord, CopyStats, FileCopier
+from acb_sync.copier import CopyRecord, FileCopier
 from acb_sync.hotkeys import GlobalHotkeys
 from acb_sync.notify import notifier
 from acb_sync.platform_utils import (
-    IS_MACOS,
     play_error_sound,
     register_autostart,
     unregister_autostart,
@@ -33,17 +31,17 @@ logger = logging.getLogger(__name__)
 # Tray colours
 _COLOR_ACTIVE = "#0A6E0A"  # green — sync running
 _COLOR_PAUSED = "#888888"  # grey  — sync paused
-_COLOR_ERROR = "#C4001A"   # red   — error / not configured
+_COLOR_ERROR = "#C4001A"  # red   — error / not configured
 
 
 class App:
-    """
-    Central orchestrator.
+    """Central orchestrator.
 
     Implements the TrayCallbacks protocol expected by SysTray.
     """
 
     def __init__(self) -> None:
+        """Initialise the application controller and all subsystems."""
         self.config = Config()
         self.watcher: FolderWatcher | None = None
         self.copier: FileCopier | None = None
@@ -228,7 +226,7 @@ class App:
         threading.Thread(target=_do, daemon=True, name="CopyNow").start()
 
     def on_quit(self) -> None:
-        """Cleanly shut down the application."""
+        """Shut down the application cleanly."""
         logger.info("Shutting down\u2026")
         self._hotkeys.unregister()
         self._stop_sync()
@@ -238,6 +236,7 @@ class App:
         self._root.destroy()
 
     def is_sync_enabled(self) -> bool:
+        """Return whether sync is currently enabled."""
         return self.config.sync_enabled
 
     def get_status_summary(self) -> str:
@@ -249,7 +248,10 @@ class App:
             return "Paused"
         stats = self.copier.stats if self.copier else None
         if stats:
-            return f"Active \u2014 {stats.total_copied} copied, {stats.total_failed} failed"
+            return (
+                f"Active \u2014 {stats.total_copied} copied, "
+                f"{stats.total_failed} failed"
+            )
         return "Active"
 
     # ------------------------------------------------------------------
@@ -257,7 +259,7 @@ class App:
     # ------------------------------------------------------------------
 
     def _on_copy_complete(self, rec: CopyRecord) -> None:
-        """Called (from copier thread) after each copy finishes."""
+        """Handle completion of a single file copy."""
         name = Path(rec.destination).name if rec.destination else "unknown"
         if rec.skipped:
             self._tray.update_tooltip(f"Skipped: {name}")

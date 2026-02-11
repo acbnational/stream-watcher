@@ -1,5 +1,4 @@
-"""
-Accessible GUI for Stream Watcher — Settings and Status windows.
+"""Accessible GUI for Stream Watcher — Settings and Status windows.
 
 Built with tkinter for maximum screen-reader compatibility (JAWS / NVDA).
 All controls have explicit labels, keyboard shortcuts, logical tab order,
@@ -9,10 +8,8 @@ Includes a press-to-record hotkey capture widget so users can define
 any keyboard shortcut by pressing the keys rather than typing combo strings.
 """
 
-import fnmatch
 import logging
 import os
-import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import TYPE_CHECKING
@@ -26,7 +23,6 @@ from acb_sync.config import (
     get_log_path,
 )
 from acb_sync.platform_utils import (
-    IS_MACOS,
     get_super_modifier_label,
     get_system_font,
     open_file_in_default_app,
@@ -65,14 +61,29 @@ _COLLISION_LABELS = {
 _COLLISION_VALUES = list(_COLLISION_LABELS.keys())
 
 # Modifier key names to normalise
-_MODIFIER_NAMES = {"Control_L", "Control_R", "Shift_L", "Shift_R",
-                   "Alt_L", "Alt_R", "Win_L", "Win_R", "Meta_L", "Meta_R"}
+_MODIFIER_NAMES = {
+    "Control_L",
+    "Control_R",
+    "Shift_L",
+    "Shift_R",
+    "Alt_L",
+    "Alt_R",
+    "Win_L",
+    "Win_R",
+    "Meta_L",
+    "Meta_R",
+}
 _MOD_MAP = {
-    "Control_L": "ctrl", "Control_R": "ctrl",
-    "Shift_L": "shift", "Shift_R": "shift",
-    "Alt_L": "alt", "Alt_R": "alt",
-    "Win_L": _SUPER_MOD, "Win_R": _SUPER_MOD,
-    "Meta_L": _SUPER_MOD, "Meta_R": _SUPER_MOD,
+    "Control_L": "ctrl",
+    "Control_R": "ctrl",
+    "Shift_L": "shift",
+    "Shift_R": "shift",
+    "Alt_L": "alt",
+    "Alt_R": "alt",
+    "Win_L": _SUPER_MOD,
+    "Win_R": _SUPER_MOD,
+    "Meta_L": _SUPER_MOD,
+    "Meta_R": _SUPER_MOD,
 }
 
 
@@ -82,14 +93,42 @@ def _apply_theme(root: tk.Tk | tk.Toplevel) -> None:
     style = ttk.Style(root)
     style.theme_use("default")
     style.configure("TFrame", background=BG_COLOR)
-    style.configure("TLabel", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10))
-    style.configure("TLabelframe", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10))
-    style.configure("TLabelframe.Label", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10, "bold"))
-    style.configure("Header.TLabel", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 13, "bold"))
-    style.configure("Status.TLabel", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10))
-    style.configure("Success.TLabel", background=BG_COLOR, foreground=SUCCESS_FG, font=(_FONT, 10, "bold"))
-    style.configure("Error.TLabel", background=BG_COLOR, foreground=ERROR_FG, font=(_FONT, 10, "bold"))
-    style.configure("Hint.TLabel", background=BG_COLOR, foreground=DISABLED_FG, font=(_FONT, 9))
+    style.configure(
+        "TLabel", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10)
+    )
+    style.configure(
+        "TLabelframe", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10)
+    )
+    style.configure(
+        "TLabelframe.Label",
+        background=BG_COLOR,
+        foreground=FG_COLOR,
+        font=(_FONT, 10, "bold"),
+    )
+    style.configure(
+        "Header.TLabel",
+        background=BG_COLOR,
+        foreground=FG_COLOR,
+        font=(_FONT, 13, "bold"),
+    )
+    style.configure(
+        "Status.TLabel", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10)
+    )
+    style.configure(
+        "Success.TLabel",
+        background=BG_COLOR,
+        foreground=SUCCESS_FG,
+        font=(_FONT, 10, "bold"),
+    )
+    style.configure(
+        "Error.TLabel",
+        background=BG_COLOR,
+        foreground=ERROR_FG,
+        font=(_FONT, 10, "bold"),
+    )
+    style.configure(
+        "Hint.TLabel", background=BG_COLOR, foreground=DISABLED_FG, font=(_FONT, 9)
+    )
     style.configure(
         "TButton",
         background=BUTTON_BG,
@@ -102,10 +141,18 @@ def _apply_theme(root: tk.Tk | tk.Toplevel) -> None:
         background=[("active", "#004080"), ("disabled", DISABLED_BG)],
         foreground=[("disabled", DISABLED_FG)],
     )
-    style.configure("TEntry", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10))
-    style.configure("TCheckbutton", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10))
-    style.configure("TSpinbox", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10))
-    style.configure("TCombobox", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10))
+    style.configure(
+        "TEntry", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10)
+    )
+    style.configure(
+        "TCheckbutton", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10)
+    )
+    style.configure(
+        "TSpinbox", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10)
+    )
+    style.configure(
+        "TCombobox", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10)
+    )
     style.configure("Treeview", font=(_FONT, 10), rowheight=24)
     style.configure("Treeview.Heading", font=(_FONT, 10, "bold"))
 
@@ -137,9 +184,9 @@ def _make_label_entry_row(
 # Hotkey recorder widget
 # ======================================================================
 
+
 class HotkeyRecorder:
-    """
-    An accessible press-to-record control for capturing keyboard shortcuts.
+    """An accessible press-to-record control for capturing keyboard shortcuts.
 
     The user clicks "Record" (or presses Enter on it), then presses their
     desired key combination.  The captured combo is written into the linked
@@ -155,6 +202,7 @@ class HotkeyRecorder:
         label_text: str,
         variable: tk.StringVar,
     ):
+        """Create a hotkey recorder row in *parent* at *row*."""
         self._var = variable
         self._recording = False
         self._pressed_mods: set[str] = set()
@@ -165,16 +213,22 @@ class HotkeyRecorder:
         )
 
         # Display of current value
-        self._display = ttk.Entry(parent, textvariable=variable, width=22, state="readonly")
+        self._display = ttk.Entry(
+            parent, textvariable=variable, width=22, state="readonly"
+        )
         self._display.grid(row=row, column=1, sticky="w", padx=5, pady=6)
 
         btn_frame = ttk.Frame(parent)
         btn_frame.grid(row=row, column=2, sticky="w", padx=(5, 10), pady=6)
 
-        self._rec_btn = ttk.Button(btn_frame, text="Record", command=self._toggle_record, width=8)
+        self._rec_btn = ttk.Button(
+            btn_frame, text="Record", command=self._toggle_record, width=8
+        )
         self._rec_btn.pack(side="left", padx=(0, 4))
 
-        self._clr_btn = ttk.Button(btn_frame, text="Clear", command=self._clear, width=7)
+        self._clr_btn = ttk.Button(
+            btn_frame, text="Clear", command=self._clear, width=7
+        )
         self._clr_btn.pack(side="left")
 
     def _toggle_record(self) -> None:
@@ -249,10 +303,12 @@ class HotkeyRecorder:
 # Settings window
 # ======================================================================
 
+
 class SettingsWindow:
     """Accessible settings dialog for configuring Stream Watcher."""
 
     def __init__(self, app: "App"):
+        """Create the settings window (hidden until ``show`` is called)."""
         self._app = app
         self._win: tk.Toplevel | None = None
 
@@ -310,30 +366,42 @@ class SettingsWindow:
 
         # ============ Folders ============
         folder_frame = ttk.LabelFrame(main, text="Folders", padding=8)
-        folder_frame.grid(row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8))
+        folder_frame.grid(
+            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        )
         folder_frame.columnconfigure(1, weight=1)
         row += 1
 
         self._source_var = tk.StringVar(value=cfg.source_folder)
         _make_label_entry_row(
-            folder_frame, 0, "Source folder:", self._source_var,
-            browse=True, browse_callback=self._browse_source,
+            folder_frame,
+            0,
+            "Source folder:",
+            self._source_var,
+            browse=True,
+            browse_callback=self._browse_source,
         )
 
         self._dest_var = tk.StringVar(value=cfg.destination_folder)
         _make_label_entry_row(
-            folder_frame, 1, "Destination folder:", self._dest_var,
-            browse=True, browse_callback=self._browse_dest,
+            folder_frame,
+            1,
+            "Destination folder:",
+            self._dest_var,
+            browse=True,
+            browse_callback=self._browse_dest,
         )
 
         self._subdirs_var = tk.BooleanVar(value=cfg.copy_subdirectories)
-        ttk.Checkbutton(folder_frame, text="Include subdirectories", variable=self._subdirs_var).grid(
-            row=2, column=0, columnspan=2, sticky="w", padx=10, pady=4
-        )
+        ttk.Checkbutton(
+            folder_frame, text="Include subdirectories", variable=self._subdirs_var
+        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=10, pady=4)
 
         # ============ Timing ============
         timing_frame = ttk.LabelFrame(main, text="Timing", padding=8)
-        timing_frame.grid(row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8))
+        timing_frame.grid(
+            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        )
         timing_frame.columnconfigure(1, weight=1)
         row += 1
 
@@ -341,42 +409,44 @@ class SettingsWindow:
             row=0, column=0, sticky="w", padx=(10, 5), pady=6
         )
         self._interval_var = tk.StringVar(value=str(cfg.check_interval))
-        ttk.Spinbox(timing_frame, from_=5, to=3600, textvariable=self._interval_var, width=8).grid(
-            row=0, column=1, sticky="w", padx=5, pady=6
-        )
+        ttk.Spinbox(
+            timing_frame, from_=5, to=3600, textvariable=self._interval_var, width=8
+        ).grid(row=0, column=1, sticky="w", padx=5, pady=6)
 
         ttk.Label(timing_frame, text="Stable time before copy (seconds):").grid(
             row=1, column=0, sticky="w", padx=(10, 5), pady=6
         )
         self._stable_var = tk.StringVar(value=str(cfg.stable_time))
-        ttk.Spinbox(timing_frame, from_=0, to=3600, textvariable=self._stable_var, width=8).grid(
-            row=1, column=1, sticky="w", padx=5, pady=6
-        )
+        ttk.Spinbox(
+            timing_frame, from_=0, to=3600, textvariable=self._stable_var, width=8
+        ).grid(row=1, column=1, sticky="w", padx=5, pady=6)
 
         # ============ File Filters & Gating ============
         filter_frame = ttk.LabelFrame(main, text="File Filters", padding=8)
-        filter_frame.grid(row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8))
+        filter_frame.grid(
+            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        )
         filter_frame.columnconfigure(1, weight=1)
         row += 1
 
-        ttk.Label(filter_frame, text="File extensions (comma-separated, blank=all):").grid(
-            row=0, column=0, sticky="w", padx=(10, 5), pady=6
-        )
+        ttk.Label(
+            filter_frame, text="File extensions (comma-separated, blank=all):"
+        ).grid(row=0, column=0, sticky="w", padx=(10, 5), pady=6)
         self._ext_var = tk.StringVar(value=", ".join(cfg.file_extensions))
         ttk.Entry(filter_frame, textvariable=self._ext_var, width=30).grid(
             row=0, column=1, sticky="we", padx=5, pady=6
         )
 
-        ttk.Label(filter_frame, text="Include patterns (comma-separated globs, blank=all):").grid(
-            row=1, column=0, sticky="w", padx=(10, 5), pady=6
-        )
+        ttk.Label(
+            filter_frame, text="Include patterns (comma-separated globs, blank=all):"
+        ).grid(row=1, column=0, sticky="w", padx=(10, 5), pady=6)
         self._include_var = tk.StringVar(value=", ".join(cfg.include_patterns))
         ttk.Entry(filter_frame, textvariable=self._include_var, width=30).grid(
             row=1, column=1, sticky="we", padx=5, pady=6
         )
         ttk.Label(
             filter_frame,
-            text="Only copy files matching these patterns.  e.g.  ACB_*, *_stream_*.mp4",
+            text="e.g.  ACB_*, *_stream_*.mp4",
             style="Hint.TLabel",
         ).grid(row=2, column=1, sticky="w", padx=5, pady=(0, 4))
 
@@ -387,36 +457,48 @@ class SettingsWindow:
         ttk.Entry(filter_frame, textvariable=self._exclude_var, width=30).grid(
             row=3, column=1, sticky="we", padx=5, pady=6
         )
-        ttk.Label(filter_frame, text="e.g.  *.tmp, ~*, thumbs.db", style="Hint.TLabel").grid(
-            row=4, column=1, sticky="w", padx=5, pady=(0, 4)
-        )
+        ttk.Label(
+            filter_frame, text="e.g.  *.tmp, ~*, thumbs.db", style="Hint.TLabel"
+        ).grid(row=4, column=1, sticky="w", padx=5, pady=(0, 4))
 
         ttk.Label(filter_frame, text="Minimum file size (bytes, 0=none):").grid(
             row=5, column=0, sticky="w", padx=(10, 5), pady=6
         )
         self._min_size_var = tk.StringVar(value=str(cfg.min_file_size))
-        ttk.Spinbox(filter_frame, from_=0, to=999999999999, textvariable=self._min_size_var, width=14).grid(
-            row=5, column=1, sticky="w", padx=5, pady=6
-        )
+        ttk.Spinbox(
+            filter_frame,
+            from_=0,
+            to=999999999999,
+            textvariable=self._min_size_var,
+            width=14,
+        ).grid(row=5, column=1, sticky="w", padx=5, pady=6)
 
         ttk.Label(filter_frame, text="Maximum file size (bytes, 0=none):").grid(
             row=6, column=0, sticky="w", padx=(10, 5), pady=6
         )
         self._max_size_var = tk.StringVar(value=str(cfg.max_file_size))
-        ttk.Spinbox(filter_frame, from_=0, to=999999999999, textvariable=self._max_size_var, width=14).grid(
-            row=6, column=1, sticky="w", padx=5, pady=6
-        )
+        ttk.Spinbox(
+            filter_frame,
+            from_=0,
+            to=999999999999,
+            textvariable=self._max_size_var,
+            width=14,
+        ).grid(row=6, column=1, sticky="w", padx=5, pady=6)
 
         # ============ Collision Protection ============
         col_frame = ttk.LabelFrame(main, text="Collision Protection", padding=8)
-        col_frame.grid(row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8))
+        col_frame.grid(
+            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        )
         col_frame.columnconfigure(1, weight=1)
         row += 1
 
         ttk.Label(col_frame, text="When destination file exists:").grid(
             row=0, column=0, sticky="w", padx=(10, 5), pady=6
         )
-        current_label = _COLLISION_LABELS.get(cfg.collision_mode, _COLLISION_LABELS[COLLISION_RENAME])
+        current_label = _COLLISION_LABELS.get(
+            cfg.collision_mode, _COLLISION_LABELS[COLLISION_RENAME]
+        )
         self._collision_var = tk.StringVar(value=current_label)
         combo = ttk.Combobox(
             col_frame,
@@ -440,45 +522,59 @@ class SettingsWindow:
 
         # ============ Verification & Retry ============
         ver_frame = ttk.LabelFrame(main, text="Copy Verification & Retry", padding=8)
-        ver_frame.grid(row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8))
+        ver_frame.grid(
+            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        )
         ver_frame.columnconfigure(1, weight=1)
         row += 1
 
         self._verify_var = tk.BooleanVar(value=cfg.verify_copies)
-        ttk.Checkbutton(ver_frame, text="Verify copies with SHA-256 checksum", variable=self._verify_var).grid(
-            row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4
-        )
+        ttk.Checkbutton(
+            ver_frame,
+            text="Verify copies with SHA-256 checksum",
+            variable=self._verify_var,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4)
 
         ttk.Label(ver_frame, text="Retry count on failure:").grid(
             row=1, column=0, sticky="w", padx=(10, 5), pady=6
         )
         self._retry_var = tk.StringVar(value=str(cfg.retry_count))
-        ttk.Spinbox(ver_frame, from_=0, to=10, textvariable=self._retry_var, width=6).grid(
-            row=1, column=1, sticky="w", padx=5, pady=6
-        )
+        ttk.Spinbox(
+            ver_frame, from_=0, to=10, textvariable=self._retry_var, width=6
+        ).grid(row=1, column=1, sticky="w", padx=5, pady=6)
 
         ttk.Label(ver_frame, text="Retry delay (seconds):").grid(
             row=2, column=0, sticky="w", padx=(10, 5), pady=6
         )
         self._retry_delay_var = tk.StringVar(value=str(cfg.retry_delay))
-        ttk.Spinbox(ver_frame, from_=1, to=300, textvariable=self._retry_delay_var, width=6).grid(
-            row=2, column=1, sticky="w", padx=5, pady=6
-        )
+        ttk.Spinbox(
+            ver_frame, from_=1, to=300, textvariable=self._retry_delay_var, width=6
+        ).grid(row=2, column=1, sticky="w", padx=5, pady=6)
 
         # ============ Notifications ============
         notif_frame = ttk.LabelFrame(main, text="Notifications", padding=8)
-        notif_frame.grid(row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8))
+        notif_frame.grid(
+            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        )
         notif_frame.columnconfigure(1, weight=1)
         row += 1
 
         self._sound_var = tk.BooleanVar(value=cfg.play_sound_on_error)
-        ttk.Checkbutton(notif_frame, text="Play system sound on copy failure", variable=self._sound_var).grid(
-            row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4
-        )
+        ttk.Checkbutton(
+            notif_frame,
+            text="Play system sound on copy failure",
+            variable=self._sound_var,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4)
 
         # ============ Global Hotkeys ============
-        hk_frame = ttk.LabelFrame(main, text="Global Hotkeys  (click Record, then press your shortcut)", padding=8)
-        hk_frame.grid(row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8))
+        hk_frame = ttk.LabelFrame(
+            main,
+            text="Global Hotkeys  (click Record, then press your shortcut)",
+            padding=8,
+        )
+        hk_frame.grid(
+            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        )
         hk_frame.columnconfigure(1, weight=1)
         row += 1
 
@@ -499,27 +595,33 @@ class SettingsWindow:
 
         # ============ Startup ============
         startup_frame = ttk.LabelFrame(main, text="Startup", padding=8)
-        startup_frame.grid(row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8))
+        startup_frame.grid(
+            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        )
         startup_frame.columnconfigure(1, weight=1)
         row += 1
 
         self._minimized_var = tk.BooleanVar(value=cfg.start_minimized)
-        ttk.Checkbutton(startup_frame, text="Start minimized to tray", variable=self._minimized_var).grid(
-            row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4
-        )
+        ttk.Checkbutton(
+            startup_frame, text="Start minimized to tray", variable=self._minimized_var
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4)
 
         self._startup_var = tk.BooleanVar(value=cfg.start_with_windows)
-        ttk.Checkbutton(startup_frame, text="Start at login", variable=self._startup_var).grid(
-            row=1, column=0, columnspan=2, sticky="w", padx=10, pady=4
-        )
+        ttk.Checkbutton(
+            startup_frame, text="Start at login", variable=self._startup_var
+        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=10, pady=4)
 
         # ---- Buttons ----
         btn_frame = ttk.Frame(main)
         btn_frame.grid(row=row, column=0, columnspan=3, pady=(12, 5))
         row += 1
 
-        ttk.Button(btn_frame, text="Save", command=self._on_save).pack(side="left", padx=8)
-        ttk.Button(btn_frame, text="Cancel", command=self._on_close).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="Save", command=self._on_save).pack(
+            side="left", padx=8
+        )
+        ttk.Button(btn_frame, text="Cancel", command=self._on_close).pack(
+            side="left", padx=8
+        )
 
         self._win.after(100, lambda: self._win.focus_force())
 
@@ -548,10 +650,14 @@ class SettingsWindow:
         dest = self._dest_var.get().strip()
 
         if not source:
-            messagebox.showerror("Validation Error", "Source folder is required.", parent=self._win)
+            messagebox.showerror(
+                "Validation Error", "Source folder is required.", parent=self._win
+            )
             return
         if not dest:
-            messagebox.showerror("Validation Error", "Destination folder is required.", parent=self._win)
+            messagebox.showerror(
+                "Validation Error", "Destination folder is required.", parent=self._win
+            )
             return
         if not os.path.isdir(source):
             messagebox.showerror(
@@ -622,8 +728,8 @@ class SettingsWindow:
             if key in hotkeys:
                 messagebox.showerror(
                     "Validation Error",
-                    f"Duplicate hotkey \"{key}\" assigned to both "
-                    f"\"{hotkeys[key]}\" and \"{label}\".",
+                    f'Duplicate hotkey "{key}" assigned to both '
+                    f'"{hotkeys[key]}" and "{label}".',
                     parent=self._win,
                 )
                 return
@@ -642,9 +748,15 @@ class SettingsWindow:
         cfg.destination_folder = dest
         cfg.check_interval = interval
         cfg.stable_time = stable
-        cfg.file_extensions = [e.strip() for e in self._ext_var.get().split(",") if e.strip()]
-        cfg.include_patterns = [p.strip() for p in self._include_var.get().split(",") if p.strip()]
-        cfg.exclude_patterns = [p.strip() for p in self._exclude_var.get().split(",") if p.strip()]
+        cfg.file_extensions = [
+            e.strip() for e in self._ext_var.get().split(",") if e.strip()
+        ]
+        cfg.include_patterns = [
+            p.strip() for p in self._include_var.get().split(",") if p.strip()
+        ]
+        cfg.exclude_patterns = [
+            p.strip() for p in self._exclude_var.get().split(",") if p.strip()
+        ]
         cfg.copy_subdirectories = self._subdirs_var.get()
         cfg.start_minimized = self._minimized_var.get()
         cfg.start_with_windows = self._startup_var.get()
@@ -657,17 +769,39 @@ class SettingsWindow:
         cfg.retry_delay = retry_delay
         cfg.play_sound_on_error = self._sound_var.get()
         # Hotkeys — normalise "Press keys…" placeholder to empty
-        cfg.hotkey_pause_resume = "" if self._hk_pause_var.get() == "Press keys\u2026" else self._hk_pause_var.get()
-        cfg.hotkey_copy_now = "" if self._hk_copy_var.get() == "Press keys\u2026" else self._hk_copy_var.get()
-        cfg.hotkey_status = "" if self._hk_status_var.get() == "Press keys\u2026" else self._hk_status_var.get()
-        cfg.hotkey_settings = "" if self._hk_settings_var.get() == "Press keys\u2026" else self._hk_settings_var.get()
-        cfg.hotkey_quit = "" if self._hk_quit_var.get() == "Press keys\u2026" else self._hk_quit_var.get()
+        cfg.hotkey_pause_resume = (
+            ""
+            if self._hk_pause_var.get() == "Press keys\u2026"
+            else self._hk_pause_var.get()
+        )
+        cfg.hotkey_copy_now = (
+            ""
+            if self._hk_copy_var.get() == "Press keys\u2026"
+            else self._hk_copy_var.get()
+        )
+        cfg.hotkey_status = (
+            ""
+            if self._hk_status_var.get() == "Press keys\u2026"
+            else self._hk_status_var.get()
+        )
+        cfg.hotkey_settings = (
+            ""
+            if self._hk_settings_var.get() == "Press keys\u2026"
+            else self._hk_settings_var.get()
+        )
+        cfg.hotkey_quit = (
+            ""
+            if self._hk_quit_var.get() == "Press keys\u2026"
+            else self._hk_quit_var.get()
+        )
         cfg.save()
 
         # Restart the watcher with new settings
         self._app.restart_sync()
 
-        messagebox.showinfo("Settings Saved", "Settings saved successfully.", parent=self._win)
+        messagebox.showinfo(
+            "Settings Saved", "Settings saved successfully.", parent=self._win
+        )
         self._on_close()
 
     def _on_close(self) -> None:
@@ -687,10 +821,12 @@ class SettingsWindow:
 # Status window
 # ======================================================================
 
+
 class StatusWindow:
     """Accessible status window showing current sync state, stats, and copy history."""
 
     def __init__(self, app: "App"):
+        """Create the status window (hidden until ``show`` is called)."""
         self._app = app
         self._win: tk.Toplevel | None = None
         self._status_label: ttk.Label | None = None
@@ -700,6 +836,7 @@ class StatusWindow:
         self._update_job: str | None = None
 
     def show(self) -> None:
+        """Show or focus the status window."""
         if self._win is not None and self._win.winfo_exists():
             self._win.lift()
             self._win.focus_force()
@@ -728,7 +865,9 @@ class StatusWindow:
         )
 
         # ---- Status summary ----
-        self._status_label = ttk.Label(main, text="Initializing\u2026", style="Status.TLabel")
+        self._status_label = ttk.Label(
+            main, text="Initializing\u2026", style="Status.TLabel"
+        )
         self._status_label.grid(row=1, column=0, sticky="w", padx=10, pady=4)
 
         self._stats_label = ttk.Label(main, text="", style="Status.TLabel")
@@ -774,7 +913,9 @@ class StatusWindow:
 
         self._tree.grid(row=0, column=0, sticky="nsew")
 
-        tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self._tree.yview)
+        tree_scroll = ttk.Scrollbar(
+            tree_frame, orient="vertical", command=self._tree.yview
+        )
         tree_scroll.grid(row=0, column=1, sticky="ns")
         self._tree.configure(yscrollcommand=tree_scroll.set)
 
@@ -782,7 +923,9 @@ class StatusWindow:
         btn_frame = ttk.Frame(main)
         btn_frame.grid(row=6, column=0, pady=(8, 5))
 
-        self._sync_btn = ttk.Button(btn_frame, text="Pause Sync", command=self._toggle_sync)
+        self._sync_btn = ttk.Button(
+            btn_frame, text="Pause Sync", command=self._toggle_sync
+        )
         self._sync_btn.pack(side="left", padx=8)
 
         ttk.Button(btn_frame, text="Copy Now", command=self._copy_now).pack(
@@ -840,7 +983,10 @@ class StatusWindow:
 
         # Status text
         if not configured:
-            status = "Not configured \u2014 open Settings to set source and destination folders."
+            status = (
+                "Not configured \u2014 open Settings"
+                " to set source and destination folders."
+            )
             style = "Error.TLabel"
         elif enabled:
             status = "Sync is ACTIVE \u2014 watching for new files."
@@ -873,7 +1019,9 @@ class StatusWindow:
                 parts.append(f"Stabilising: {pending}")
 
         if self._stats_label:
-            self._stats_label.configure(text=" | ".join(parts) if parts else "No stats yet.")
+            self._stats_label.configure(
+                text=" | ".join(parts) if parts else "No stats yet."
+            )
 
         # Sync button label
         if self._sync_btn:
@@ -903,7 +1051,11 @@ class StatusWindow:
             src_name = os.path.basename(rec.source)
             dst_name = os.path.basename(rec.destination) if rec.destination else ""
             size_str = f"{rec.size_bytes:,}" if rec.size_bytes else ""
-            ver = "Yes" if rec.verified else ("N/A" if rec.skipped else ("No" if rec.success else ""))
+            ver = (
+                "Yes"
+                if rec.verified
+                else ("N/A" if rec.skipped else ("No" if rec.success else ""))
+            )
 
             self._tree.insert(
                 "",

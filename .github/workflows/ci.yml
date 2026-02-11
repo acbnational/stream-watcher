@@ -1,0 +1,41 @@
+# Stream Watcher — CI quality gate
+# Runs on every push and pull request to ensure code quality.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - name: Ruff lint
+        run: ruff check acb_sync/
+      - name: Ruff format check
+        run: ruff format --check acb_sync/
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pyright -r requirements.txt
+      - name: Pyright
+        run: pyright acb_sync/

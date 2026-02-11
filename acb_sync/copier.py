@@ -1,5 +1,4 @@
-"""
-File copy engine for Stream Watcher.
+"""File copy engine for Stream Watcher.
 
 Copies files from the watched source folder to the destination,
 preserving relative structure when subdirectory mode is on.
@@ -11,14 +10,13 @@ Runs copies in background threads to keep the UI responsive.
 
 import hashlib
 import logging
-import os
 import shutil
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 from acb_sync.config import (
     COLLISION_OVERWRITE,
@@ -46,8 +44,7 @@ def _expand_rename_pattern(
     ext: str,
     counter: int,
 ) -> str:
-    """
-    Expand token-based rename pattern.
+    """Expand token-based rename pattern.
 
     Supported tokens:
       {name}     — filename without extension
@@ -73,6 +70,7 @@ def _expand_rename_pattern(
 @dataclass
 class CopyRecord:
     """Record of a single file copy operation."""
+
     source: str
     destination: str
     size_bytes: int = 0
@@ -85,6 +83,7 @@ class CopyRecord:
 
     @property
     def duration(self) -> float:
+        """Return the copy duration in seconds."""
         if self.finished and self.started:
             return self.finished - self.started
         return 0.0
@@ -100,6 +99,7 @@ class CopyRecord:
 @dataclass
 class CopyStats:
     """Aggregated copy statistics."""
+
     total_copied: int = 0
     total_failed: int = 0
     total_skipped: int = 0
@@ -110,6 +110,7 @@ class CopyStats:
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record(self, rec: CopyRecord) -> None:
+        """Record a completed copy and update aggregate stats."""
         with self._lock:
             self.history.append(rec)
             if rec.skipped:
@@ -128,8 +129,7 @@ class CopyStats:
 
 
 class FileCopier:
-    """
-    Copies files from source to destination in background threads.
+    """Copies files from source to destination in background threads.
 
     Parameters
     ----------
@@ -155,6 +155,7 @@ class FileCopier:
         Number of retries on a failed copy (0 = no retries).
     retry_delay : int
         Seconds to wait between retry attempts.
+
     """
 
     def __init__(
@@ -171,6 +172,7 @@ class FileCopier:
         retry_count: int = 0,
         retry_delay: int = 5,
     ):
+        """Configure the file copier with the given options."""
         self.source_root = Path(source_root)
         self.destination_root = Path(destination_root)
         self._on_copy_complete = on_copy_complete
@@ -188,6 +190,7 @@ class FileCopier:
 
     @property
     def active_copies(self) -> int:
+        """Return the number of copies currently in progress."""
         with self._lock:
             return self._active_copies
 
@@ -202,8 +205,7 @@ class FileCopier:
         thread.start()
 
     def copy_all_now(self) -> int:
-        """
-        Scan the source folder and copy every file that passes gating.
+        """Scan the source folder and copy every file that passes gating.
 
         Returns the number of files queued for copy.
         """
@@ -230,8 +232,7 @@ class FileCopier:
         return self.destination_root / rel
 
     def _resolve_collision(self, dest: Path) -> Path | None:
-        """
-        Apply the configured collision strategy.
+        """Apply the configured collision strategy.
 
         Returns the final destination path, or None if the file should be skipped.
         """
@@ -315,7 +316,11 @@ class FileCopier:
                 try:
                     logger.info(
                         "Copying %s -> %s (%d bytes, attempt %d/%d)",
-                        source_path, dest, rec.size_bytes, attempt, max_attempts,
+                        source_path,
+                        dest,
+                        rec.size_bytes,
+                        attempt,
+                        max_attempts,
                     )
                     shutil.copy2(str(source_path), str(dest))
                     rec.finished = time.time()
@@ -329,7 +334,8 @@ class FileCopier:
                             rec.success = True
                             logger.info(
                                 "Verified copy (SHA-256 match) in %.1fs: %s",
-                                rec.duration, dest,
+                                rec.duration,
+                                dest,
                             )
                         else:
                             rec.error = (
@@ -340,7 +346,9 @@ class FileCopier:
                     else:
                         if dest.exists() and dest.stat().st_size == rec.size_bytes:
                             rec.success = True
-                            logger.info("Copy complete in %.1fs: %s", rec.duration, dest)
+                            logger.info(
+                                "Copy complete in %.1fs: %s", rec.duration, dest
+                            )
                         else:
                             rec.error = "Post-copy size mismatch"
                             logger.error("Size mismatch after copying %s", dest)
@@ -356,7 +364,8 @@ class FileCopier:
                 if attempt < max_attempts:
                     logger.info(
                         "Retrying in %ds (attempt %d failed)…",
-                        self._retry_delay, attempt,
+                        self._retry_delay,
+                        attempt,
                     )
                     time.sleep(self._retry_delay)
 

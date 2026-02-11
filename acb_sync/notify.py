@@ -18,15 +18,19 @@ logger = logging.getLogger(__name__)
 _HAS_AO2 = False
 if IS_WINDOWS:
     try:
-        from accessible_output2.outputs.auto import Auto as _AO2Auto  # type: ignore[import-untyped]
+        from accessible_output2.outputs.auto import (
+            Auto as _AO2Auto,  # type: ignore[import-untyped]
+        )
+
         _HAS_AO2 = True
     except ImportError:
-        logger.warning("accessible_output2 not installed — screen reader notifications disabled.")
+        logger.warning(
+            "accessible_output2 not installed — screen reader notifications disabled."
+        )
 
 
 class ScreenReaderNotifier:
-    """
-    Thread-safe cross-platform speech notifier.
+    """Thread-safe cross-platform speech notifier.
 
     - Windows: accessible_output2 (JAWS / NVDA / Narrator)
     - macOS: ``say`` CLI command (heard by VoiceOver users)
@@ -37,11 +41,11 @@ class ScreenReaderNotifier:
     """
 
     def __init__(self) -> None:
+        """Detect and bind to the active screen reader output."""
         self._output = _AO2Auto() if _HAS_AO2 else None  # type: ignore[name-defined]
 
     def speak(self, text: str, interrupt: bool = True) -> None:
-        """
-        Announce *text* via the active screen reader or system TTS.
+        """Announce *text* via the active screen reader or system TTS.
 
         Parameters
         ----------
@@ -49,6 +53,7 @@ class ScreenReaderNotifier:
             The message to speak.
         interrupt : bool
             If True, interrupt any in-progress speech first.
+
         """
         if not self._output and not IS_MACOS:
             logger.debug("SR notify (no output): %s", text)

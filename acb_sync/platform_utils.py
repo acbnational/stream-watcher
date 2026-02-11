@@ -1,5 +1,4 @@
-"""
-Cross-platform utilities for Stream Watcher.
+"""Cross-platform utilities for Stream Watcher.
 
 Centralises all OS-detection logic so every other module can import
 a single canonical set of helpers rather than scattering ``sys.platform``
@@ -31,10 +30,9 @@ IS_LINUX: bool = sys.platform.startswith("linux")
 
 
 def get_config_dir() -> Path:
-    """
-    Return the application config directory, created if needed.
+    r"""Return the application config directory, created if needed.
 
-    - Windows : ``%APPDATA%\\StreamWatcher``
+    - Windows : ``%APPDATA%\StreamWatcher``
     - macOS   : ``~/Library/Application Support/StreamWatcher``
     - Linux   : ``$XDG_CONFIG_HOME/StreamWatcher`` (default ``~/.config``)
     """
@@ -98,6 +96,7 @@ def play_error_sound() -> None:
     try:
         if IS_WINDOWS:
             import winsound  # type: ignore[import-untyped]
+
             winsound.MessageBeep(winsound.MB_ICONHAND)
         elif IS_MACOS:
             # Basso is the standard macOS alert sound
@@ -126,6 +125,7 @@ def register_autostart() -> bool:
     if IS_WINDOWS:
         try:
             import winreg  # type: ignore[import-untyped]
+
             with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE
             ) as key:
@@ -170,9 +170,10 @@ def register_autostart() -> bool:
             return False
 
     if IS_LINUX:
-        autostart_dir = Path(
-            os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
-        ) / "autostart"
+        autostart_dir = (
+            Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+            / "autostart"
+        )
         autostart_dir.mkdir(parents=True, exist_ok=True)
         desktop_path = autostart_dir / "stream-watcher.desktop"
         desktop_content = f"""\
@@ -200,6 +201,7 @@ def unregister_autostart() -> bool:
     if IS_WINDOWS:
         try:
             import winreg
+
             with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE
             ) as key:
@@ -213,7 +215,9 @@ def unregister_autostart() -> bool:
             return False
 
     if IS_MACOS:
-        plist_path = Path.home() / "Library" / "LaunchAgents" / f"{_LAUNCHD_LABEL}.plist"
+        plist_path = (
+            Path.home() / "Library" / "LaunchAgents" / f"{_LAUNCHD_LABEL}.plist"
+        )
         try:
             plist_path.unlink(missing_ok=True)
             logger.info("Removed launchd plist.")
@@ -223,9 +227,11 @@ def unregister_autostart() -> bool:
             return False
 
     if IS_LINUX:
-        desktop_path = Path(
-            os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
-        ) / "autostart" / "stream-watcher.desktop"
+        desktop_path = (
+            Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+            / "autostart"
+            / "stream-watcher.desktop"
+        )
         try:
             desktop_path.unlink(missing_ok=True)
             return True

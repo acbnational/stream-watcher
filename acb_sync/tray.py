@@ -1,14 +1,14 @@
-"""
-System tray icon for Stream Watcher.
+"""System tray icon for Stream Watcher.
 
 Provides a persistent system-tray presence with a context menu
 to open settings, view status, pause/resume sync, copy now, and quit.
 The tooltip dynamically shows the current state and copy count.
 """
 
+import contextlib
 import logging
 import threading
-from typing import Callable, Protocol
+from typing import Protocol
 
 import pystray
 from PIL import Image, ImageDraw
@@ -19,13 +19,33 @@ logger = logging.getLogger(__name__)
 class TrayCallbacks(Protocol):
     """Expected callback interface for the tray icon owner."""
 
-    def on_open_status(self) -> None: ...
-    def on_open_settings(self) -> None: ...
-    def on_toggle_sync(self) -> None: ...
-    def on_copy_now(self) -> None: ...
-    def on_quit(self) -> None: ...
-    def is_sync_enabled(self) -> bool: ...
-    def get_status_summary(self) -> str: ...
+    def on_open_status(self) -> None:
+        """Open the status window."""
+        ...
+
+    def on_open_settings(self) -> None:
+        """Open the settings window."""
+        ...
+
+    def on_toggle_sync(self) -> None:
+        """Toggle sync on or off."""
+        ...
+
+    def on_copy_now(self) -> None:
+        """Trigger an immediate copy sweep."""
+        ...
+
+    def on_quit(self) -> None:
+        """Quit the application."""
+        ...
+
+    def is_sync_enabled(self) -> bool:
+        """Return whether sync is currently active."""
+        ...
+
+    def get_status_summary(self) -> str:
+        """Return a human-readable status string."""
+        ...
 
 
 def _create_icon_image(color: str = "#0078D4", size: int = 64) -> Image.Image:
@@ -48,18 +68,19 @@ def _create_icon_image(color: str = "#0078D4", size: int = 64) -> Image.Image:
 
 
 class SysTray:
-    """
-    Manages the system-tray icon and its context menu.
+    """Manages the system-tray icon and its context menu.
 
     The tray runs on its own thread so it does not block the tkinter main loop.
     """
 
     def __init__(self, callbacks: TrayCallbacks):
+        """Create the tray icon bound to *callbacks*."""
         self._callbacks = callbacks
         self._icon: pystray.Icon | None = None
         self._thread: threading.Thread | None = None
 
     def _build_menu(self) -> pystray.Menu:
+        """Build the context menu with current status."""
         sync_label = (
             "Pause Sync" if self._callbacks.is_sync_enabled() else "Resume Sync"
         )
@@ -86,17 +107,17 @@ class SysTray:
             menu=self._build_menu(),
         )
 
-        self._thread = threading.Thread(target=self._icon.run, daemon=True, name="SysTray")
+        self._thread = threading.Thread(
+            target=self._icon.run, daemon=True, name="SysTray"
+        )
         self._thread.start()
         logger.info("System tray icon started.")
 
     def stop(self) -> None:
         """Remove the tray icon and stop its thread."""
         if self._icon:
-            try:
+            with contextlib.suppress(Exception):
                 self._icon.stop()
-            except Exception:
-                pass
             self._icon = None
         logger.info("System tray icon stopped.")
 

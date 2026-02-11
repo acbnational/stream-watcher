@@ -1,0 +1,49 @@
+[project]
+name = "stream-watcher"
+version = "1.0.0"
+description = "Cross-platform automated file sync tool for the ACB Media team"
+requires-python = ">=3.13"
+
+# ---------------------------------------------------------------------------
+# Ruff — linter & formatter
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "D",    # pydocstyle (docstring conventions)
+    "RUF",  # Ruff-specific rules
+]
+ignore = [
+    "D100",  # Missing docstring in public module (module-level handled manually)
+    "D104",  # Missing docstring in public package
+    "D203",  # 1 blank line before class docstring (conflicts with D211)
+    "D213",  # Multi-line summary second line (conflicts with D212)
+    "D400",  # First line should end with a period (too strict)
+    "D415",  # First line should end with punctuation (too strict)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"acb_sync/service.py" = ["D"]  # pywin32 service methods have fixed names
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Pyright — type checking (basic mode for gradual adoption)
+# ---------------------------------------------------------------------------
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "basic"
+reportMissingImports = true
+reportMissingTypeStubs = false

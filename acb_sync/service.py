@@ -40,6 +40,7 @@ if IS_WINDOWS:
         import win32event  # type: ignore[import-untyped]
         import win32service  # type: ignore[import-untyped]
         import win32serviceutil  # type: ignore[import-untyped]
+
         _HAS_WIN32 = True
     except ImportError:
         pass
@@ -149,6 +150,7 @@ if _HAS_WIN32:
 # macOS launchd helpers
 # ======================================================================
 
+
 def _macos_plist_content() -> str:
     """Generate the launchd plist XML for the current Python environment."""
     exe = sys.executable
@@ -174,9 +176,9 @@ def _macos_plist_content() -> str:
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>{log_dir / 'stdout.log'}</string>
+    <string>{log_dir / "stdout.log"}</string>
     <key>StandardErrorPath</key>
-    <string>{log_dir / 'stderr.log'}</string>
+    <string>{log_dir / "stderr.log"}</string>
 </dict>
 </plist>
 """
@@ -215,6 +217,7 @@ def _macos_remove() -> None:
 # Cross-platform headless runner (Linux / fallback)
 # ======================================================================
 
+
 def _run_foreground() -> None:
     """Run the sync engine in the foreground until SIGINT/SIGTERM."""
     watcher, _ = _run_sync_loop()
@@ -237,6 +240,7 @@ def _run_foreground() -> None:
 # ======================================================================
 # CLI entry
 # ======================================================================
+
 
 def main() -> None:
     """Entry point when this module is run for service/daemon control."""
@@ -301,7 +305,9 @@ def _show_help() -> None:
         print("  python -m acb_sync.service run       Run in foreground")
     else:
         print("Usage:")
-        print("  python -m acb_sync.service start     Run in foreground (Ctrl-C to stop)")
+        print(
+            "  python -m acb_sync.service start     Run in foreground (Ctrl-C to stop)"
+        )
 
 
 def install_service() -> None:

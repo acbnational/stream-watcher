@@ -81,13 +81,47 @@ The copy pipeline flows: **watcher → stability tracker → copier**
 ## Dependencies
 
 | Package | Purpose | Platform |
-|---|---|---|
+| --- | --- | --- |
 | watchdog | File system events | All |
 | pystray | System tray icon | All |
 | Pillow | Icon image generation | All |
 | keyboard | Global hotkeys | All (macOS needs Accessibility perms) |
 | pywin32 | Windows service | Windows only |
 | accessible_output2 | Screen reader speech | Windows only |
+
+## Code Quality
+
+All code must pass the CI quality gate before merging. The gate runs **ruff** (lint + format) and **pyright** (type check).
+
+### Local setup (one-time)
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+After this, every `git commit` automatically runs lint and format checks via pre-commit hooks.
+
+### Manual checks
+```bash
+# Lint
+python -m ruff check acb_sync/
+
+# Auto-fix lint issues
+python -m ruff check acb_sync/ --fix
+
+# Format
+python -m ruff format acb_sync/
+
+# Type check
+pyright acb_sync/
+```
+
+### Rules
+- Line length limit: **88 characters** (ruff/black standard)
+- All public functions, methods, and classes must have docstrings (pydocstyle D rules)
+- Imports must be sorted (isort via ruff)
+- No unused imports or variables
+- Configuration is in `pyproject.toml` — do not add separate `.flake8`, `.isort.cfg`, etc.
 
 ## Common Tasks
 

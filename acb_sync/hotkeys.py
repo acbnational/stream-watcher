@@ -1,5 +1,4 @@
-"""
-Global hotkey support for Stream Watcher.
+"""Global hotkey support for Stream Watcher.
 
 Registers system-wide keyboard shortcuts so the user can
 pause/resume sync, trigger an immediate copy, open the
@@ -11,13 +10,13 @@ permissions in System Settings > Privacy & Security > Accessibility).
 """
 
 import logging
-import threading
-from typing import Callable
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
 try:
     import keyboard as _kb  # type: ignore[import-untyped]
+
     _HAS_KEYBOARD = True
 except ImportError:
     _HAS_KEYBOARD = False
@@ -25,8 +24,7 @@ except ImportError:
 
 
 class GlobalHotkeys:
-    """
-    Register and unregister up to five global hotkeys.
+    """Register and unregister up to five global hotkeys.
 
     All five slots are user-configurable.  Pass an empty string to
     leave a slot unassigned.
@@ -37,6 +35,7 @@ class GlobalHotkeys:
         Hotkey combo strings, e.g. ``'ctrl+shift+f9'``.
     on_pause_resume, on_copy_now, on_status, on_settings, on_quit : callable
         Callbacks invoked when the corresponding hotkey is pressed.
+
     """
 
     def __init__(
@@ -52,6 +51,7 @@ class GlobalHotkeys:
         on_settings: Callable[[], None],
         on_quit: Callable[[], None],
     ):
+        """Bind the five hotkey slots to their callbacks."""
         self._keys = {
             "pause_resume": pause_resume_key,
             "copy_now": copy_now_key,
@@ -70,6 +70,7 @@ class GlobalHotkeys:
 
     @property
     def available(self) -> bool:
+        """Return whether the keyboard library is importable."""
         return _HAS_KEYBOARD
 
     def register(self) -> None:

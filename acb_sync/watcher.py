@@ -1,5 +1,4 @@
-"""
-File system watcher for Stream Watcher.
+"""File system watcher for Stream Watcher.
 
 Uses the watchdog library to monitor a source folder for new or
 modified files, then queues them for stability checking and copying.
@@ -8,13 +7,13 @@ modified files, then queues them for stability checking and copying.
 import fnmatch
 import logging
 import os
-import time
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
+from watchdog.events import FileCreatedEvent, FileModifiedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileModifiedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,9 @@ class _StabilityTracker:
         self._pending: dict[Path, tuple[float, int]] = {}
         self._lock = threading.Lock()
         self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._poll, daemon=True, name="StabilityTracker")
+        self._thread = threading.Thread(
+            target=self._poll, daemon=True, name="StabilityTracker"
+        )
 
     @property
     def stable_seconds(self) -> int:
@@ -41,7 +42,9 @@ class _StabilityTracker:
 
     def start(self) -> None:
         self._stop.clear()
-        self._thread = threading.Thread(target=self._poll, daemon=True, name="StabilityTracker")
+        self._thread = threading.Thread(
+            target=self._poll, daemon=True, name="StabilityTracker"
+        )
         self._thread.start()
 
     def stop(self) -> None:
@@ -110,6 +113,7 @@ class NewFileHandler(FileSystemEventHandler):
         include_patterns: list[str] | None = None,
         exclude_patterns: list[str] | None = None,
     ):
+        """Initialise the handler with optional filters."""
         super().__init__()
         self._tracker = tracker
         self._extensions = extensions  # None or empty = accept all
@@ -121,8 +125,7 @@ class NewFileHandler(FileSystemEventHandler):
         # Check include patterns first — file must match at least one
         if self._include_patterns:
             matched = any(
-                fnmatch.fnmatch(name.lower(), p.lower())
-                for p in self._include_patterns
+                fnmatch.fnmatch(name.lower(), p.lower()) for p in self._include_patterns
             )
             if not matched:
                 logger.debug(
@@ -142,12 +145,14 @@ class NewFileHandler(FileSystemEventHandler):
         return ext in self._extensions
 
     def on_created(self, event: FileCreatedEvent) -> None:  # type: ignore[override]
+        """Handle a new file creation event."""
         if event.is_directory:
             return
         if self._should_track(event.src_path):
             self._tracker.track(Path(event.src_path))
 
     def on_modified(self, event: FileModifiedEvent) -> None:  # type: ignore[override]
+        """Handle a file modification event."""
         if event.is_directory:
             return
         if self._should_track(event.src_path):
@@ -155,8 +160,7 @@ class NewFileHandler(FileSystemEventHandler):
 
 
 class FolderWatcher:
-    """
-    High-level watcher that combines watchdog + stability tracking.
+    """High-level watcher that combines watchdog + stability tracking.
 
     Usage:
         watcher = FolderWatcher(source, on_ready, stable_secs=60, extensions=[])
@@ -175,6 +179,7 @@ class FolderWatcher:
         exclude_patterns: list[str] | None = None,
         recursive: bool = False,
     ):
+        """Create a new folder watcher."""
         self.source_folder = source_folder
         self._recursive = recursive
         self._tracker = _StabilityTracker(stable_seconds, on_file_ready)
@@ -189,12 +194,17 @@ class FolderWatcher:
     # ---- lifecycle ----
 
     def start(self) -> None:
+        """Start watching the source folder."""
         if not os.path.isdir(self.source_folder):
             logger.error("Source folder does not exist: %s", self.source_folder)
-            raise FileNotFoundError(f"Source folder does not exist: {self.source_folder}")
+            raise FileNotFoundError(
+                f"Source folder does not exist: {self.source_folder}"
+            )
 
         self._observer = Observer()
-        self._observer.schedule(self._handler, self.source_folder, recursive=self._recursive)
+        self._observer.schedule(
+            self._handler, self.source_folder, recursive=self._recursive
+        )
         self._observer.start()
         self._tracker.start()
         logger.info(
@@ -205,6 +215,7 @@ class FolderWatcher:
         )
 
     def stop(self) -> None:
+        """Stop watching and release resources."""
         if self._observer:
             self._observer.stop()
             self._observer.join(timeout=5)
@@ -214,22 +225,27 @@ class FolderWatcher:
 
     @property
     def is_running(self) -> bool:
+        """Return whether the watcher is currently active."""
         return self._observer is not None and self._observer.is_alive()
 
     # ---- config hot-update ----
 
     def update_stable_time(self, seconds: int) -> None:
+        """Hot-update the stability threshold."""
         self._tracker.stable_seconds = seconds
 
     def update_extensions(self, extensions: list[str]) -> None:
+        """Hot-update the allowed file extensions."""
         self._handler._extensions = extensions or None
 
     # ---- status ----
 
     @property
     def pending_count(self) -> int:
+        """Return the number of files awaiting stability."""
         return self._tracker.pending_count
 
     @property
     def pending_files(self) -> list[str]:
+        """Return paths of files currently being tracked."""
         return self._tracker.pending_files

@@ -34,7 +34,7 @@ Works on **Windows**, **macOS**, and **Linux**.
 ## Requirements
 
 | Platform | Minimum Version |
-|---|---|
+| --- | --- |
 | **Python** | 3.13+ |
 | **Windows** | 10 / 11 |
 | **macOS** | 12 Monterey+ |
@@ -67,7 +67,7 @@ python -m acb_sync
 On first launch, the Settings window opens automatically so you can configure:
 
 | Setting | Description |
-|---|---|
+| --- | --- |
 | **Source folder** | The folder to watch for new files |
 | **Destination folder** | Where to copy files (can be a different drive, network path, etc.) |
 | **Check interval** | How often the stability tracker polls files (default: 30 s) |
@@ -99,6 +99,7 @@ Right-click the tray icon for:
 - **Quit** — exit the application
 
 The tray icon colour indicates status:
+
 - 🟢 **Green** — sync is active
 - ⚫ **Grey** — sync is paused
 - 🔴 **Red** — not configured or error
@@ -108,7 +109,7 @@ The tray icon colour indicates status:
 When the destination already contains a file with the same name, the **collision mode** setting controls behaviour. In **Rename** mode, a new filename is generated using the **rename pattern** with these tokens:
 
 | Token | Expands to | Example |
-|---|---|---|
+| --- | --- | --- |
 | `{name}` | Original filename (no extension) | `recording` |
 | `{ext}` | Original extension (no dot) | `mp4` |
 | `{n}` | Auto-incrementing counter | `1`, `2`, `3`… |
@@ -120,6 +121,7 @@ When the destination already contains a file with the same name, the **collision
 **Default pattern:** `{name}_{n}.{ext}` → `recording_1.mp4`, `recording_2.mp4`, …
 
 **Other examples:**
+
 - `{name}_{datetime}.{ext}` → `recording_20250115_143005.mp4`
 - `{name}_copy{n}_{date}.{ext}` → `recording_copy1_2025-01-15.mp4`
 
@@ -132,7 +134,7 @@ When **Verify copies** is enabled, after each file is copied the tool computes t
 Five system-wide keyboard shortcuts work even when the app is minimized or in the background. All are configurable via a **press-to-record** widget in Settings:
 
 | Default Shortcut | Action |
-|---|---|
+| --- | --- |
 | **Ctrl+Shift+F9** | Pause / Resume sync |
 | **Ctrl+Shift+F10** | Copy All Now |
 | **Ctrl+Shift+F11** | Open Status Window |
@@ -148,6 +150,7 @@ Every user-initiated action (pause, resume, copy, settings saved) triggers a spo
 ### Windows
 
 Uses **accessible_output2** which works with:
+
 - **JAWS** (Freedom Scientific)
 - **NVDA** (NV Access)
 - **Windows Narrator** (built-in)
@@ -165,7 +168,7 @@ Speech notifications are not currently supported. Enable **Play sound on error**
 ## Keyboard Navigation
 
 | Key | Action |
-|---|---|
+| --- | --- |
 | **Tab** | Move between controls |
 | **Enter** | Activate buttons |
 | **Escape** | Close current window |
@@ -225,18 +228,19 @@ python -m acb_sync.service start
 Settings are stored in JSON. The config and log paths are platform-dependent:
 
 | Platform | Config directory |
-|---|---|
+| --- | --- |
 | **Windows** | `%APPDATA%\StreamWatcher\` |
 | **macOS** | `~/Library/Application Support/StreamWatcher/` |
 | **Linux** | `~/.config/StreamWatcher/` (or `$XDG_CONFIG_HOME`) |
 
 Within that directory:
+
 - `config.json` — all settings
 - `stream_watcher.log` — current log (auto-rotated)
 
 ## Architecture
 
-```
+```text
 acb_sync/
 ├── __init__.py          App metadata
 ├── __main__.py          Entry point
