@@ -4,12 +4,15 @@ Uses the watchdog library to monitor a source folder for new or
 modified files, then queues them for stability checking and copying.
 """
 
+from __future__ import annotations
+
 import fnmatch
 import logging
 import os
 import threading
 import time
 from collections.abc import Callable
+from typing import Dict, Tuple, Any
 from pathlib import Path
 
 from watchdog.events import FileCreatedEvent, FileModifiedEvent, FileSystemEventHandler
@@ -25,7 +28,8 @@ class _StabilityTracker:
         self._stable_seconds = stable_seconds
         self._on_stable = on_stable
         # file_path -> (last_modified_time, last_size)
-        self._pending: dict[Path, tuple[float, int]] = {}
+        # Use simple assignment to avoid pyright type-expression quirks
+        self._pending = {}
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(
@@ -75,7 +79,7 @@ class _StabilityTracker:
     def _poll(self) -> None:
         """Periodically check if tracked files have stabilised."""
         while not self._stop.is_set():
-            stable: list[Path] = []
+            stable = []  # type: list[Path]
             now = time.time()
             with self._lock:
                 for path, (last_seen, last_size) in list(self._pending.items()):
@@ -189,7 +193,7 @@ class FolderWatcher:
             include_patterns or None,
             exclude_patterns or None,
         )
-        self._observer: Observer | None = None
+        self._observer: Any | None = None
 
     # ---- lifecycle ----
 
@@ -201,11 +205,10 @@ class FolderWatcher:
                 f"Source folder does not exist: {self.source_folder}"
             )
 
-        self._observer = Observer()
-        self._observer.schedule(
-            self._handler, self.source_folder, recursive=self._recursive
-        )
-        self._observer.start()
+        observer = Observer()
+        self._observer = observer
+        observer.schedule(self._handler, self.source_folder, recursive=self._recursive)
+        observer.start()
         self._tracker.start()
         logger.info(
             "Watching '%s' (recursive=%s, stable=%ds)",

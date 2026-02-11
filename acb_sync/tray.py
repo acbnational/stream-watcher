@@ -8,10 +8,11 @@ The tooltip dynamically shows the current state and copy count.
 import contextlib
 import logging
 import threading
-from typing import Protocol
+from typing import Protocol, Any
 
 import pystray
 from PIL import Image, ImageDraw
+from PIL.Image import Image as PILImage
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class TrayCallbacks(Protocol):
         ...
 
 
-def _create_icon_image(color: str = "#0078D4", size: int = 64) -> Image.Image:
+def _create_icon_image(color: str = "#0078D4", size: int = 64) -> PILImage:
     """Create a simple solid-colour square icon with an inner circle indicator."""
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -76,7 +77,7 @@ class SysTray:
     def __init__(self, callbacks: TrayCallbacks):
         """Create the tray icon bound to *callbacks*."""
         self._callbacks = callbacks
-        self._icon: pystray.Icon | None = None
+        self._icon: Any | None = None
         self._thread: threading.Thread | None = None
 
     def _build_menu(self) -> pystray.Menu:
@@ -107,9 +108,11 @@ class SysTray:
             menu=self._build_menu(),
         )
 
-        self._thread = threading.Thread(
-            target=self._icon.run, daemon=True, name="SysTray"
-        )
+        # Capture local reference so type-checker knows it's not None
+        icon = self._icon
+        if icon is None:
+            return
+        self._thread = threading.Thread(target=icon.run, daemon=True, name="SysTray")
         self._thread.start()
         logger.info("System tray icon started.")
 

@@ -9,11 +9,11 @@
     "build",
     "dist"
   ],
-  "include": ["acb_sync"],
+  "include": ["acb_sync", "."],
   "executionEnvironments": [
     {
-      "root": "acb_sync",
-      "extraPaths": []
+      "root": ".",
+      "extraPaths": ["."]
     }
   ]
 }

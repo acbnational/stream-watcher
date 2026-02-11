@@ -123,7 +123,7 @@ class App:
             return
 
         try:
-            self.copier = FileCopier(
+            copier = FileCopier(
                 source_root=cfg.source_folder,
                 destination_root=cfg.destination_folder,
                 on_copy_complete=self._on_copy_complete,
@@ -136,16 +136,18 @@ class App:
                 retry_count=cfg.retry_count,
                 retry_delay=cfg.retry_delay,
             )
-            self.watcher = FolderWatcher(
+            self.copier = copier
+            watcher = FolderWatcher(
                 source_folder=cfg.source_folder,
-                on_file_ready=self.copier.copy_file,
+                on_file_ready=copier.copy_file,
                 stable_seconds=cfg.stable_time,
                 extensions=cfg.file_extensions or None,
                 include_patterns=cfg.include_patterns or None,
                 exclude_patterns=cfg.exclude_patterns or None,
                 recursive=cfg.copy_subdirectories,
             )
-            self.watcher.start()
+            self.watcher = watcher
+            watcher.start()
             cfg.sync_enabled = True
             cfg.save()
             logger.info("Sync started.")
@@ -218,7 +220,10 @@ class App:
         notifier.speak("Copying all pending files now.")
 
         def _do():
-            count = self.copier.copy_all_now()
+            copier = self.copier
+            if copier is None:
+                return
+            count = copier.copy_all_now()
             msg = f"Queued {count} file{'s' if count != 1 else ''} for copy."
             notifier.speak(msg)
             self._update_tray_state()

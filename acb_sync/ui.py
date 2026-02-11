@@ -12,7 +12,8 @@ import logging
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Callable
 
 from acb_sync.config import (
     COLLISION_OVERWRITE,
@@ -158,13 +159,13 @@ def _apply_theme(root: tk.Tk | tk.Toplevel) -> None:
 
 
 def _make_label_entry_row(
-    parent: ttk.Frame,
+    parent: tk.Misc,
     row: int,
     label_text: str,
-    variable: tk.StringVar | None = None,
+    variable: tk.Variable,
     width: int = 50,
     browse: bool = False,
-    browse_callback=None,
+    browse_callback: Callable[..., Any] | None = None,
 ) -> ttk.Entry:
     """Create an accessible Label + Entry (+ optional Browse button) row."""
     label = ttk.Label(parent, text=label_text)
@@ -174,7 +175,8 @@ def _make_label_entry_row(
     entry.grid(row=row, column=1, sticky="we", padx=5, pady=6)
 
     if browse:
-        btn = ttk.Button(parent, text="Browse\u2026", command=browse_callback)
+        cb = browse_callback if browse_callback is not None else (lambda: None)
+        btn = ttk.Button(parent, text="Browse\u2026", command=cb)
         btn.grid(row=row, column=2, sticky="w", padx=(5, 10), pady=6)
 
     return entry
@@ -197,7 +199,7 @@ class HotkeyRecorder:
 
     def __init__(
         self,
-        parent: ttk.Frame,
+        parent: tk.Misc,
         row: int,
         label_text: str,
         variable: tk.StringVar,
@@ -310,7 +312,7 @@ class SettingsWindow:
     def __init__(self, app: "App"):
         """Create the settings window (hidden until ``show`` is called)."""
         self._app = app
-        self._win: tk.Toplevel | None = None
+        self._win: tk.Misc | None = None
 
     def show(self) -> None:
         """Show or focus the settings window."""
@@ -623,7 +625,9 @@ class SettingsWindow:
             side="left", padx=8
         )
 
-        self._win.after(100, lambda: self._win.focus_force())
+        win = self._win
+        if win:
+            win.after(100, lambda w=win: w.focus_force())
 
     # ---- browse helpers ----
 
@@ -651,19 +655,23 @@ class SettingsWindow:
 
         if not source:
             messagebox.showerror(
-                "Validation Error", "Source folder is required.", parent=self._win
+                "Validation Error",
+                "Source folder is required.",
+                parent=cast(tk.Misc, self._win),
             )
             return
         if not dest:
             messagebox.showerror(
-                "Validation Error", "Destination folder is required.", parent=self._win
+                "Validation Error",
+                "Destination folder is required.",
+                parent=cast(tk.Misc, self._win),
             )
             return
         if not os.path.isdir(source):
             messagebox.showerror(
                 "Validation Error",
                 f"Source folder does not exist:\n{source}",
-                parent=self._win,
+                parent=cast(tk.Misc, self._win),
             )
             return
 
@@ -675,7 +683,7 @@ class SettingsWindow:
             messagebox.showerror(
                 "Validation Error",
                 "Check interval must be a number of at least 5 seconds.",
-                parent=self._win,
+                parent=cast(tk.Misc, self._win),
             )
             return
 
@@ -687,7 +695,7 @@ class SettingsWindow:
             messagebox.showerror(
                 "Validation Error",
                 "Stable time must be a non-negative number.",
-                parent=self._win,
+                parent=cast(tk.Misc, self._win),
             )
             return
 
@@ -698,7 +706,7 @@ class SettingsWindow:
             messagebox.showerror(
                 "Validation Error",
                 "File size limits must be numbers.",
-                parent=self._win,
+                parent=cast(tk.Misc, self._win),
             )
             return
 
@@ -709,7 +717,7 @@ class SettingsWindow:
             messagebox.showerror(
                 "Validation Error",
                 "Retry count and delay must be numbers.",
-                parent=self._win,
+                parent=cast(tk.Misc, self._win),
             )
             return
 
@@ -730,7 +738,7 @@ class SettingsWindow:
                     "Validation Error",
                     f'Duplicate hotkey "{key}" assigned to both '
                     f'"{hotkeys[key]}" and "{label}".',
-                    parent=self._win,
+                    parent=cast(tk.Misc, self._win),
                 )
                 return
             hotkeys[key] = label
@@ -800,7 +808,9 @@ class SettingsWindow:
         self._app.restart_sync()
 
         messagebox.showinfo(
-            "Settings Saved", "Settings saved successfully.", parent=self._win
+            "Settings Saved",
+            "Settings saved successfully.",
+            parent=cast(tk.Misc, self._win),
         )
         self._on_close()
 
@@ -946,7 +956,9 @@ class StatusWindow:
 
         # Start periodic update
         self._schedule_update()
-        self._win.after(100, lambda: self._win.focus_force())
+        win = self._win
+        if win:
+            win.after(100, lambda w=win: w.focus_force())
 
     # ---- periodic refresh ----
 
@@ -1078,7 +1090,9 @@ class StatusWindow:
         if log_path.exists():
             open_file_in_default_app(log_path)
         else:
-            messagebox.showinfo("Log File", "No log file exists yet.", parent=self._win)
+            messagebox.showinfo(
+                "Log File", "No log file exists yet.", parent=cast(tk.Misc, self._win)
+            )
 
     def _on_close(self) -> None:
         if self._update_job and self._win:

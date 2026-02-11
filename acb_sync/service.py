@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from acb_sync.platform_utils import IS_MACOS, IS_WINDOWS
 
@@ -52,7 +53,7 @@ _PLIST_DIR = Path.home() / "Library" / "LaunchAgents" if IS_MACOS else Path("/de
 _PLIST_PATH = _PLIST_DIR / f"{_LAUNCHD_LABEL}.plist" if IS_MACOS else Path("/dev/null")
 
 
-def _run_sync_loop() -> "tuple[object, object]":
+def _run_sync_loop() -> tuple[Any, Any]:
     """
     Start the core sync engine (watcher + copier) without any UI.
 
