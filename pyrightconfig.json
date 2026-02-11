@@ -1,0 +1,19 @@
+{
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "exclude": [
+    "**/tests",
+    "**/.venv",
+    ".git",
+    "build",
+    "dist"
+  ],
+  "include": ["acb_sync"],
+  "executionEnvironments": [
+    {
+      "root": "acb_sync",
+      "extraPaths": []
+    }
+  ]
+}
