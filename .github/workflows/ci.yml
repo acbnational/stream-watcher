@@ -36,10 +36,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Install GTK3 dev libs (needed to build wxPython)
+      - name: Install dependencies (wxPython excluded — needs native GUI libs)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev
-      - run: pip install pyright -r requirements.txt
+          pip install pyright
+          pip install $(grep -v wxPython requirements.txt)
       - name: Pyright
         run: pyright acb_sync/
