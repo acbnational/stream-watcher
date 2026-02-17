@@ -16,6 +16,7 @@ setup(
         "pystray>=0.19.0",
         "Pillow>=10.0.0",
         "keyboard>=0.13.5",
+        "wxPython>=4.2.0",
     ],
     extras_require={
         "windows": [

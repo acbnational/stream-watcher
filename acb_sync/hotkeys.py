@@ -10,6 +10,9 @@ permissions in System Settings > Privacy & Security > Accessibility).
 """
 
 import logging
+import os
+import platform
+import threading
 from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
@@ -21,6 +24,47 @@ try:
 except ImportError:
     _HAS_KEYBOARD = False
     logger.warning("keyboard library not installed — global hotkeys disabled.")
+
+# ---------------------------------------------------------------------------
+# macOS root-privilege check
+# ---------------------------------------------------------------------------
+_MACOS_ROOT_MSG = (
+    "Global hotkeys unavailable — the keyboard library requires root on "
+    "macOS. Run with sudo, or use the menu/status-window controls instead."
+)
+
+
+def _can_listen() -> bool:
+    """Return True if the keyboard listener will work on this OS.
+
+    On macOS the ``keyboard`` library unconditionally checks
+    ``os.geteuid() == 0`` before starting its listener thread.  If the
+    process is not root the listener raises ``OSError`` in a background
+    thread and may trigger a SIGTRAP that kills the process.  We mirror
+    that same check here so we can skip registration gracefully.
+    """
+    if platform.system() != "Darwin":
+        return True
+    return os.geteuid() == 0
+
+
+# Safety net: if the keyboard listener thread still dies (e.g. on a platform
+# we didn't pre-check), log a warning instead of printing a scary traceback.
+_original_excepthook = threading.excepthook
+
+
+def _hotkey_excepthook(args: threading.ExceptHookArgs) -> None:
+    if (
+        args.thread is not None
+        and args.thread.name == "listen"
+        and isinstance(args.exc_value, OSError)
+    ):
+        logger.warning(_MACOS_ROOT_MSG)
+        return
+    _original_excepthook(args)
+
+
+threading.excepthook = _hotkey_excepthook
 
 
 class GlobalHotkeys:
@@ -79,6 +123,9 @@ class GlobalHotkeys:
             logger.info("Global hotkeys unavailable (keyboard library missing).")
             return
         if self._registered:
+            return
+        if not _can_listen():
+            logger.warning(_MACOS_ROOT_MSG)
             return
         try:
             for name, key in self._keys.items():

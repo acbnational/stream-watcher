@@ -1,7 +1,7 @@
 """Main application controller for Stream Watcher.
 
 Ties together configuration, file watching, copying, the system tray,
-global hotkeys, screen-reader notifications, and the accessible tkinter UI.
+global hotkeys, screen-reader notifications, and the accessible wxPython UI.
 
 Cross-platform: Windows, macOS, and Linux.
 """
@@ -11,6 +11,8 @@ import logging.handlers
 import sys
 import threading
 from pathlib import Path
+
+import wx
 
 from acb_sync import __app_name__, __version__
 from acb_sync.config import Config, get_log_path
@@ -46,12 +48,13 @@ class App:
         self.watcher: FolderWatcher | None = None
         self.copier: FileCopier | None = None
 
-        # tkinter root — hidden, used only to drive the event loop
-        import tkinter as tk
+        # wxPython app — drives the native event loop
+        self._wx_app = wx.App(False)
 
-        self._root = tk.Tk()
-        self._root.title(__app_name__)
-        self._root.withdraw()  # Hide the root window
+        # Hidden frame to anchor the event loop (never shown)
+        self._frame = wx.Frame(None, title=__app_name__)
+        self._frame.Hide()
+        self._frame.Bind(wx.EVT_CLOSE, lambda e: self.on_quit())
 
         self._settings_win = SettingsWindow(self)
         self._status_win = StatusWindow(self)
@@ -72,15 +75,12 @@ class App:
             on_quit=self.on_quit,
         )
 
-        # Ensure clean shutdown on WM_DELETE_WINDOW of root
-        self._root.protocol("WM_DELETE_WINDOW", self.on_quit)
-
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        """Start the application (tray + optional sync, then enter tk mainloop)."""
+        """Start the application (tray + optional sync, then enter wx MainLoop)."""
         self._setup_logging()
 
         logger.info("%s %s starting.", __app_name__, __version__)
@@ -102,14 +102,14 @@ class App:
 
         # If not configured, open settings automatically
         if not self.config.is_configured():
-            self._root.after(300, self.on_open_settings)
+            wx.CallLater(300, self.on_open_settings)
         elif not self.config.start_minimized:
-            self._root.after(300, self.on_open_status)
+            wx.CallLater(300, self.on_open_status)
 
         notifier.speak(f"{__app_name__} is running.")
 
-        # Enter the tkinter main loop
-        self._root.mainloop()
+        # Enter the wxPython main loop
+        self._wx_app.MainLoop()
 
     # ------------------------------------------------------------------
     # Sync control
@@ -195,11 +195,11 @@ class App:
 
     def on_open_status(self) -> None:
         """Show the status window (thread-safe)."""
-        self._root.after(0, self._status_win.show)
+        wx.CallAfter(self._status_win.show)
 
     def on_open_settings(self) -> None:
         """Show the settings window (thread-safe)."""
-        self._root.after(0, self._settings_win.show)
+        wx.CallAfter(self._settings_win.show)
 
     def on_toggle_sync(self) -> None:
         """Pause or resume sync."""
@@ -237,8 +237,8 @@ class App:
         self._stop_sync()
         self._tray.stop()
         notifier.speak(f"{__app_name__} closing.")
-        self._root.quit()
-        self._root.destroy()
+        self._frame.Destroy()
+        self._wx_app.ExitMainLoop()
 
     def is_sync_enabled(self) -> bool:
         """Return whether sync is currently enabled."""

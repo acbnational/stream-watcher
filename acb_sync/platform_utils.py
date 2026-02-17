@@ -97,7 +97,7 @@ def play_error_sound() -> None:
         if IS_WINDOWS:
             import winsound  # type: ignore[import-untyped]
 
-            winsound.MessageBeep(winsound.MB_ICONHAND)
+            winsound.MessageBeep(winsound.MB_ICONHAND)  # type: ignore[attr-defined]
         elif IS_MACOS:
             # Basso is the standard macOS alert sound
             subprocess.Popen(
@@ -126,10 +126,19 @@ def register_autostart() -> bool:
         try:
             import winreg  # type: ignore[import-untyped]
 
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE
+            with winreg.OpenKey(  # type: ignore[attr-defined]
+                winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
+                _AUTOSTART_KEY,
+                0,
+                winreg.KEY_SET_VALUE,  # type: ignore[attr-defined]
             ) as key:
-                winreg.SetValueEx(key, _AUTOSTART_NAME, 0, winreg.REG_SZ, cmd)
+                winreg.SetValueEx(  # type: ignore[attr-defined]
+                    key,
+                    _AUTOSTART_NAME,
+                    0,
+                    winreg.REG_SZ,  # type: ignore[attr-defined]
+                    cmd,
+                )
             logger.info("Registered Windows autostart.")
             return True
         except Exception:
@@ -202,10 +211,13 @@ def unregister_autostart() -> bool:
         try:
             import winreg
 
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE
+            with winreg.OpenKey(  # type: ignore[attr-defined]
+                winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
+                _AUTOSTART_KEY,
+                0,
+                winreg.KEY_SET_VALUE,  # type: ignore[attr-defined]
             ) as key:
-                winreg.DeleteValue(key, _AUTOSTART_NAME)
+                winreg.DeleteValue(key, _AUTOSTART_NAME)  # type: ignore[attr-defined]
             logger.info("Removed Windows autostart.")
             return True
         except FileNotFoundError:
