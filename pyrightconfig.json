@@ -13,7 +13,7 @@
   "executionEnvironments": [
     {
       "root": ".",
-      "extraPaths": ["."]
+      "extraPaths": [".", "typestubs"]
     }
   ]
 }
