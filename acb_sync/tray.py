@@ -9,7 +9,7 @@ import contextlib
 import logging
 import platform
 import threading
-from typing import Protocol, Any
+from typing import Any, Protocol
 
 import pystray
 from PIL import Image, ImageDraw

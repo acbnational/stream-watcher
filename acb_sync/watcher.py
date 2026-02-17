@@ -12,10 +12,14 @@ import os
 import threading
 import time
 from collections.abc import Callable
-from typing import Dict, Tuple, Any
 from pathlib import Path
+from typing import Any
 
-from watchdog.events import FileCreatedEvent, FileModifiedEvent, FileSystemEventHandler
+from watchdog.events import (
+    FileCreatedEvent,
+    FileModifiedEvent,
+    FileSystemEventHandler,
+)
 from watchdog.observers import Observer
 
 logger = logging.getLogger(__name__)
