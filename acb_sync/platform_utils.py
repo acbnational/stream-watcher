@@ -127,10 +127,17 @@ def register_autostart() -> bool:
             import winreg  # type: ignore[import-untyped]
 
             with winreg.OpenKey(  # type: ignore[attr-defined]
-                winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE
+                winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
+                _AUTOSTART_KEY,
+                0,
+                winreg.KEY_SET_VALUE,  # type: ignore[attr-defined]
             ) as key:
                 winreg.SetValueEx(  # type: ignore[attr-defined]
-                    key, _AUTOSTART_NAME, 0, winreg.REG_SZ, cmd
+                    key,
+                    _AUTOSTART_NAME,
+                    0,
+                    winreg.REG_SZ,  # type: ignore[attr-defined]
+                    cmd,
                 )
             logger.info("Registered Windows autostart.")
             return True
@@ -205,7 +212,10 @@ def unregister_autostart() -> bool:
             import winreg
 
             with winreg.OpenKey(  # type: ignore[attr-defined]
-                winreg.HKEY_CURRENT_USER, _AUTOSTART_KEY, 0, winreg.KEY_SET_VALUE
+                winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
+                _AUTOSTART_KEY,
+                0,
+                winreg.KEY_SET_VALUE,  # type: ignore[attr-defined]
             ) as key:
                 winreg.DeleteValue(key, _AUTOSTART_NAME)  # type: ignore[attr-defined]
             logger.info("Removed Windows autostart.")
