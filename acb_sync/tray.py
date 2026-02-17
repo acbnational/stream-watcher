@@ -7,6 +7,7 @@ The tooltip dynamically shows the current state and copy count.
 
 import contextlib
 import logging
+import platform
 import threading
 from typing import Protocol, Any
 
@@ -71,7 +72,7 @@ def _create_icon_image(color: str = "#0078D4", size: int = 64) -> PILImage:
 class SysTray:
     """Manages the system-tray icon and its context menu.
 
-    The tray runs on its own thread so it does not block the tkinter main loop.
+    The tray runs on its own thread so it does not block the wx main loop.
     """
 
     def __init__(self, callbacks: TrayCallbacks):
@@ -99,7 +100,15 @@ class SysTray:
         )
 
     def start(self) -> None:
-        """Start the tray icon on a daemon thread."""
+        """Start the tray icon.
+
+        On macOS, ``pystray``'s ``Icon.run()`` calls ``NSApplication.run()``
+        which must own the main thread — but wxPython also needs the main
+        thread.  We use ``run_detached()`` instead, which lets the existing
+        wx main-loop drive event processing.
+
+        On other platforms the icon runs on a daemon thread as before.
+        """
         icon_img = _create_icon_image()
         self._icon = pystray.Icon(
             name="StreamWatcher",
@@ -108,12 +117,17 @@ class SysTray:
             menu=self._build_menu(),
         )
 
-        # Capture local reference so type-checker knows it's not None
         icon = self._icon
         if icon is None:
             return
-        self._thread = threading.Thread(target=icon.run, daemon=True, name="SysTray")
-        self._thread.start()
+
+        if platform.system() == "Darwin":
+            icon.run_detached()
+        else:
+            self._thread = threading.Thread(
+                target=icon.run, daemon=True, name="SysTray"
+            )
+            self._thread.start()
         logger.info("System tray icon started.")
 
     def stop(self) -> None:

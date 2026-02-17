@@ -1,8 +1,12 @@
 """Accessible GUI for Stream Watcher — Settings and Status windows.
 
-Built with tkinter for maximum screen-reader compatibility (JAWS / NVDA).
-All controls have explicit labels, keyboard shortcuts, logical tab order,
-and high-contrast colours that meet WCAG 2.2 AA contrast requirements.
+Built with wxPython for native screen-reader support (VoiceOver on macOS,
+JAWS/NVDA on Windows).  wxPython uses native Cocoa widgets on macOS and
+Win32 on Windows, which automatically participate in the OS accessibility
+hierarchy.
+
+All controls have explicit accessible names, keyboard shortcuts, logical
+tab order, and high-contrast colours that meet WCAG 2.2 AA requirements.
 
 Includes a press-to-record hotkey capture widget so users can define
 any keyboard shortcut by pressing the keys rather than typing combo strings.
@@ -10,10 +14,9 @@ any keyboard shortcut by pressing the keys rather than typing combo strings.
 
 import logging
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from typing import TYPE_CHECKING, Any, cast
-from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+import wx
 
 from acb_sync.config import (
     COLLISION_OVERWRITE,
@@ -25,7 +28,6 @@ from acb_sync.config import (
 )
 from acb_sync.platform_utils import (
     get_super_modifier_label,
-    get_system_font,
     open_file_in_default_app,
 )
 
@@ -34,24 +36,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ---- Detect platform font ----
-_FONT = get_system_font()
 _SUPER_MOD = get_super_modifier_label()  # "command" on macOS, "win" elsewhere
 
 # ---- Accessible colour palette (WCAG 2.2 AA contrast >= 4.5:1) ----
-BG_COLOR = "#FFFFFF"
-FG_COLOR = "#1A1A1A"
-ACCENT = "#0058A3"
 ERROR_FG = "#C4001A"
 SUCCESS_FG = "#0A6E0A"
-FIELD_BG = "#FFFFFF"
-FIELD_FG = "#1A1A1A"
-BUTTON_BG = "#0058A3"
-BUTTON_FG = "#FFFFFF"
-DISABLED_BG = "#E0E0E0"
-DISABLED_FG = "#6E6E6E"
-FOCUS_RING = "#005A9E"
-RECORDING_BG = "#FFF3CD"  # pale yellow while recording a hotkey
 
 # Human-readable collision mode labels
 _COLLISION_LABELS = {
@@ -61,125 +50,66 @@ _COLLISION_LABELS = {
 }
 _COLLISION_VALUES = list(_COLLISION_LABELS.keys())
 
-# Modifier key names to normalise
-_MODIFIER_NAMES = {
-    "Control_L",
-    "Control_R",
-    "Shift_L",
-    "Shift_R",
-    "Alt_L",
-    "Alt_R",
-    "Win_L",
-    "Win_R",
-    "Meta_L",
-    "Meta_R",
-}
-_MOD_MAP = {
-    "Control_L": "ctrl",
-    "Control_R": "ctrl",
-    "Shift_L": "shift",
-    "Shift_R": "shift",
-    "Alt_L": "alt",
-    "Alt_R": "alt",
-    "Win_L": _SUPER_MOD,
-    "Win_R": _SUPER_MOD,
-    "Meta_L": _SUPER_MOD,
-    "Meta_R": _SUPER_MOD,
+# wx keycode → human-readable modifier name
+_WX_MOD_KEYCODES: dict[int, str] = {
+    wx.WXK_CONTROL: "ctrl",
+    wx.WXK_RAW_CONTROL: "ctrl",
+    wx.WXK_SHIFT: "shift",
+    wx.WXK_ALT: "alt",
+    wx.WXK_WINDOWS_LEFT: _SUPER_MOD,
+    wx.WXK_WINDOWS_RIGHT: _SUPER_MOD,
+    wx.WXK_COMMAND: _SUPER_MOD,
 }
 
-
-def _apply_theme(root: tk.Tk | tk.Toplevel) -> None:
-    """Apply high-contrast, accessible styling to the window and ttk widgets."""
-    root.configure(bg=BG_COLOR)
-    style = ttk.Style(root)
-    style.theme_use("default")
-    style.configure("TFrame", background=BG_COLOR)
-    style.configure(
-        "TLabel", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10)
-    )
-    style.configure(
-        "TLabelframe", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10)
-    )
-    style.configure(
-        "TLabelframe.Label",
-        background=BG_COLOR,
-        foreground=FG_COLOR,
-        font=(_FONT, 10, "bold"),
-    )
-    style.configure(
-        "Header.TLabel",
-        background=BG_COLOR,
-        foreground=FG_COLOR,
-        font=(_FONT, 13, "bold"),
-    )
-    style.configure(
-        "Status.TLabel", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10)
-    )
-    style.configure(
-        "Success.TLabel",
-        background=BG_COLOR,
-        foreground=SUCCESS_FG,
-        font=(_FONT, 10, "bold"),
-    )
-    style.configure(
-        "Error.TLabel",
-        background=BG_COLOR,
-        foreground=ERROR_FG,
-        font=(_FONT, 10, "bold"),
-    )
-    style.configure(
-        "Hint.TLabel", background=BG_COLOR, foreground=DISABLED_FG, font=(_FONT, 9)
-    )
-    style.configure(
-        "TButton",
-        background=BUTTON_BG,
-        foreground=BUTTON_FG,
-        font=(_FONT, 10),
-        padding=(12, 6),
-    )
-    style.map(
-        "TButton",
-        background=[("active", "#004080"), ("disabled", DISABLED_BG)],
-        foreground=[("disabled", DISABLED_FG)],
-    )
-    style.configure(
-        "TEntry", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10)
-    )
-    style.configure(
-        "TCheckbutton", background=BG_COLOR, foreground=FG_COLOR, font=(_FONT, 10)
-    )
-    style.configure(
-        "TSpinbox", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10)
-    )
-    style.configure(
-        "TCombobox", fieldbackground=FIELD_BG, foreground=FIELD_FG, font=(_FONT, 10)
-    )
-    style.configure("Treeview", font=(_FONT, 10), rowheight=24)
-    style.configure("Treeview.Heading", font=(_FONT, 10, "bold"))
+# Special keycodes → name
+_WX_SPECIAL_KEYS: dict[int, str] = {
+    wx.WXK_F1: "f1",
+    wx.WXK_F2: "f2",
+    wx.WXK_F3: "f3",
+    wx.WXK_F4: "f4",
+    wx.WXK_F5: "f5",
+    wx.WXK_F6: "f6",
+    wx.WXK_F7: "f7",
+    wx.WXK_F8: "f8",
+    wx.WXK_F9: "f9",
+    wx.WXK_F10: "f10",
+    wx.WXK_F11: "f11",
+    wx.WXK_F12: "f12",
+    wx.WXK_SPACE: "space",
+    wx.WXK_TAB: "tab",
+    wx.WXK_RETURN: "enter",
+    wx.WXK_BACK: "backspace",
+    wx.WXK_DELETE: "delete",
+    wx.WXK_HOME: "home",
+    wx.WXK_END: "end",
+    wx.WXK_PAGEUP: "pageup",
+    wx.WXK_PAGEDOWN: "pagedown",
+    wx.WXK_UP: "up",
+    wx.WXK_DOWN: "down",
+    wx.WXK_LEFT: "left",
+    wx.WXK_RIGHT: "right",
+    wx.WXK_INSERT: "insert",
+    wx.WXK_NUMPAD0: "num0",
+    wx.WXK_NUMPAD1: "num1",
+    wx.WXK_NUMPAD2: "num2",
+    wx.WXK_NUMPAD3: "num3",
+    wx.WXK_NUMPAD4: "num4",
+    wx.WXK_NUMPAD5: "num5",
+    wx.WXK_NUMPAD6: "num6",
+    wx.WXK_NUMPAD7: "num7",
+    wx.WXK_NUMPAD8: "num8",
+    wx.WXK_NUMPAD9: "num9",
+}
 
 
-def _make_label_entry_row(
-    parent: tk.Misc,
-    row: int,
-    label_text: str,
-    variable: tk.Variable,
-    width: int = 50,
-    browse: bool = False,
-    browse_callback: Callable[..., Any] | None = None,
-) -> ttk.Entry:
-    """Create an accessible Label + Entry (+ optional Browse button) row."""
-    label = ttk.Label(parent, text=label_text)
-    label.grid(row=row, column=0, sticky="w", padx=(10, 5), pady=6)
-
-    entry = ttk.Entry(parent, textvariable=variable, width=width)
-    entry.grid(row=row, column=1, sticky="we", padx=5, pady=6)
-
-    if browse:
-        cb = browse_callback if browse_callback is not None else (lambda: None)
-        btn = ttk.Button(parent, text="Browse\u2026", command=cb)
-        btn.grid(row=row, column=2, sticky="w", padx=(5, 10), pady=6)
-
-    return entry
+def _keycode_to_name(keycode: int) -> str:
+    """Convert a wx keycode to a human-readable key name."""
+    if keycode in _WX_SPECIAL_KEYS:
+        return _WX_SPECIAL_KEYS[keycode]
+    # Printable ASCII
+    if 33 <= keycode <= 126:
+        return chr(keycode).lower()
+    return ""
 
 
 # ======================================================================
@@ -191,49 +121,55 @@ class HotkeyRecorder:
     """An accessible press-to-record control for capturing keyboard shortcuts.
 
     The user clicks "Record" (or presses Enter on it), then presses their
-    desired key combination.  The captured combo is written into the linked
-    StringVar in ``keyboard`` library format (e.g. ``ctrl+shift+f9``).
+    desired key combination.  The captured combo is written in ``keyboard``
+    library format (e.g. ``ctrl+shift+f9``).
 
     A "Clear" button removes any assigned hotkey.
     """
 
     def __init__(
         self,
-        parent: tk.Misc,
-        row: int,
+        parent: wx.Window,
+        sizer: wx.FlexGridSizer,
         label_text: str,
-        variable: tk.StringVar,
+        initial_value: str = "",
     ):
-        """Create a hotkey recorder row in *parent* at *row*."""
-        self._var = variable
+        """Create a hotkey recorder row in *parent*, added to *sizer*."""
+        self._value = initial_value
         self._recording = False
         self._pressed_mods: set[str] = set()
         self._pressed_key: str = ""
+        self._parent = parent
 
-        ttk.Label(parent, text=label_text).grid(
-            row=row, column=0, sticky="w", padx=(10, 5), pady=6
+        label = wx.StaticText(parent, label=label_text)
+        sizer.Add(label, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+
+        row_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self._display = wx.TextCtrl(
+            parent,
+            value=initial_value,
+            size=(160, -1),
+            style=wx.TE_READONLY,
         )
+        self._display.SetName(label_text)
+        row_sizer.Add(self._display, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=5)
 
-        # Display of current value
-        self._display = ttk.Entry(
-            parent, textvariable=variable, width=22, state="readonly"
-        )
-        self._display.grid(row=row, column=1, sticky="w", padx=5, pady=6)
+        self._rec_btn = wx.Button(parent, label="Record", size=(70, -1))
+        self._rec_btn.Bind(wx.EVT_BUTTON, self._on_toggle_record)
+        row_sizer.Add(self._rec_btn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=5)
 
-        btn_frame = ttk.Frame(parent)
-        btn_frame.grid(row=row, column=2, sticky="w", padx=(5, 10), pady=6)
+        self._clr_btn = wx.Button(parent, label="Clear", size=(60, -1))
+        self._clr_btn.Bind(wx.EVT_BUTTON, self._on_clear)
+        row_sizer.Add(self._clr_btn, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        self._rec_btn = ttk.Button(
-            btn_frame, text="Record", command=self._toggle_record, width=8
-        )
-        self._rec_btn.pack(side="left", padx=(0, 4))
+        sizer.Add(row_sizer, flag=wx.EXPAND | wx.RIGHT, border=10)
 
-        self._clr_btn = ttk.Button(
-            btn_frame, text="Clear", command=self._clear, width=7
-        )
-        self._clr_btn.pack(side="left")
+    def GetValue(self) -> str:
+        """Return the current hotkey combo string."""
+        return self._value
 
-    def _toggle_record(self) -> None:
+    def _on_toggle_record(self, event: wx.CommandEvent) -> None:
         if self._recording:
             self._stop_recording()
         else:
@@ -243,56 +179,58 @@ class HotkeyRecorder:
         self._recording = True
         self._pressed_mods.clear()
         self._pressed_key = ""
-        self._rec_btn.configure(text="Stop")
-        self._display.configure(state="normal")
-        self._var.set("Press keys\u2026")
-        self._display.configure(state="readonly")
-        # Bind to the toplevel window to capture keys even if entry not focused
-        top = self._display.winfo_toplevel()
-        top.bind("<KeyPress>", self._on_key_press)
-        top.bind("<KeyRelease>", self._on_key_release)
+        self._rec_btn.SetLabel("Stop")
+        self._display.SetValue("Press keys\u2026")
+        top = self._parent.GetTopLevelParent()
+        top.Bind(wx.EVT_CHAR_HOOK, self._on_key_press)
 
     def _stop_recording(self) -> None:
         self._recording = False
-        self._rec_btn.configure(text="Record")
-        top = self._display.winfo_toplevel()
-        top.unbind("<KeyPress>")
-        top.unbind("<KeyRelease>")
-        # Build the combo string
+        self._rec_btn.SetLabel("Record")
+        top = self._parent.GetTopLevelParent()
+        top.Unbind(wx.EVT_CHAR_HOOK)
         combo = self._build_combo()
-        self._display.configure(state="normal")
-        self._var.set(combo)
-        self._display.configure(state="readonly")
+        self._value = combo
+        self._display.SetValue(combo)
 
-    def _clear(self) -> None:
+    def _on_clear(self, event: wx.CommandEvent) -> None:
         if self._recording:
             self._stop_recording()
-        self._display.configure(state="normal")
-        self._var.set("")
-        self._display.configure(state="readonly")
+        self._value = ""
+        self._display.SetValue("")
 
-    def _on_key_press(self, event: tk.Event) -> str:
-        keysym = event.keysym
-        if keysym in _MODIFIER_NAMES:
-            self._pressed_mods.add(_MOD_MAP[keysym])
-        elif keysym == "Escape":
-            # Cancel recording
-            self._display.configure(state="normal")
-            self._var.set("")
-            self._display.configure(state="readonly")
-            self._stop_recording()
-        else:
-            self._pressed_key = keysym.lower()
-            # Auto-stop once a non-modifier key is captured
-            self._stop_recording()
-        return "break"
+    def _on_key_press(self, event: wx.KeyEvent) -> None:
+        keycode = event.GetKeyCode()
 
-    def _on_key_release(self, event: tk.Event) -> str:
-        return "break"
+        if keycode in _WX_MOD_KEYCODES:
+            self._pressed_mods.add(_WX_MOD_KEYCODES[keycode])
+            # Don't skip — consume the event
+            return
+
+        if keycode == wx.WXK_ESCAPE:
+            self._value = ""
+            self._display.SetValue("")
+            self._stop_recording()
+            return
+
+        # Also capture modifiers from event state
+        if event.ControlDown():
+            self._pressed_mods.add("ctrl")
+        if event.AltDown():
+            self._pressed_mods.add("alt")
+        if event.ShiftDown():
+            self._pressed_mods.add("shift")
+        if event.MetaDown() or event.CmdDown():
+            self._pressed_mods.add(_SUPER_MOD)
+
+        name = _keycode_to_name(keycode)
+        if name:
+            self._pressed_key = name
+            self._stop_recording()
+        # Don't call event.Skip() — consume all keys while recording
 
     def _build_combo(self) -> str:
         parts: list[str] = []
-        # Deterministic modifier order
         for mod in ("ctrl", "alt", "shift", _SUPER_MOD):
             if mod in self._pressed_mods:
                 parts.append(mod)
@@ -312,444 +250,444 @@ class SettingsWindow:
     def __init__(self, app: "App"):
         """Create the settings window (hidden until ``show`` is called)."""
         self._app = app
-        self._win: tk.Misc | None = None
+        self._win: wx.Dialog | None = None
 
     def show(self) -> None:
         """Show or focus the settings window."""
-        if self._win is not None and self._win.winfo_exists():
-            self._win.lift()
-            self._win.focus_force()
+        if self._win is not None:
+            self._win.Raise()
+            self._win.SetFocus()
             return
         self._build()
 
     def _build(self) -> None:
         cfg = self._app.config
 
-        self._win = tk.Toplevel()
-        self._win.title("Stream Watcher \u2014 Settings")
-        self._win.geometry("720x780")
-        self._win.minsize(620, 680)
-        self._win.resizable(True, True)
-        _apply_theme(self._win)
+        self._win = wx.Dialog(
+            None,
+            title="Stream Watcher \u2014 Settings",
+            size=(720, 780),
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+        )
+        self._win.SetMinSize((620, 680))
+        self._win.Bind(wx.EVT_CLOSE, self._on_close_event)
+        self._win.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
 
-        self._win.grab_set()
-        self._win.protocol("WM_DELETE_WINDOW", self._on_close)
-        self._win.bind("<Escape>", lambda e: self._on_close())
+        # Scrollable content area
+        scrolled = wx.ScrolledWindow(self._win, style=wx.VSCROLL)
+        scrolled.SetScrollRate(0, 20)
 
-        # Scrollable canvas for all settings
-        canvas = tk.Canvas(self._win, bg=BG_COLOR, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self._win, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        main = ttk.Frame(canvas, padding=10)
-        canvas.create_window((0, 0), window=main, anchor="nw")
-        main.columnconfigure(1, weight=1)
-
-        def _on_frame_configure(e):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        main.bind("<Configure>", _on_frame_configure)
-
-        # Allow mouse-wheel scrolling
-        def _on_mousewheel(e):
-            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
-        row = 0
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
 
         # ---- Header ----
-        ttk.Label(main, text="Settings", style="Header.TLabel").grid(
-            row=row, column=0, columnspan=3, sticky="w", padx=10, pady=(5, 12)
-        )
-        row += 1
+        header = wx.StaticText(scrolled, label="Settings")
+        header_font = header.GetFont()
+        header_font.SetPointSize(14)
+        header_font.MakeBold()
+        header.SetFont(header_font)
+        main_sizer.Add(header, flag=wx.ALL, border=10)
 
         # ============ Folders ============
-        folder_frame = ttk.LabelFrame(main, text="Folders", padding=8)
-        folder_frame.grid(
-            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
-        )
-        folder_frame.columnconfigure(1, weight=1)
-        row += 1
+        folder_box = wx.StaticBox(scrolled, label="Folders")
+        folder_sizer = wx.StaticBoxSizer(folder_box, wx.VERTICAL)
+        folder_grid = wx.FlexGridSizer(cols=3, vgap=6, hgap=5)
+        folder_grid.AddGrowableCol(1, 1)
 
-        self._source_var = tk.StringVar(value=cfg.source_folder)
-        _make_label_entry_row(
-            folder_frame,
-            0,
-            "Source folder:",
-            self._source_var,
-            browse=True,
-            browse_callback=self._browse_source,
-        )
+        # Source folder
+        lbl = wx.StaticText(scrolled, label="Source folder:")
+        folder_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._source_ctrl = wx.TextCtrl(scrolled, value=cfg.source_folder)
+        self._source_ctrl.SetName("Source folder")
+        folder_grid.Add(self._source_ctrl, flag=wx.EXPAND)
+        browse_src = wx.Button(scrolled, label="Browse\u2026")
+        browse_src.Bind(wx.EVT_BUTTON, self._browse_source)
+        folder_grid.Add(browse_src, flag=wx.RIGHT, border=10)
 
-        self._dest_var = tk.StringVar(value=cfg.destination_folder)
-        _make_label_entry_row(
-            folder_frame,
-            1,
-            "Destination folder:",
-            self._dest_var,
-            browse=True,
-            browse_callback=self._browse_dest,
-        )
+        # Destination folder
+        lbl = wx.StaticText(scrolled, label="Destination folder:")
+        folder_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._dest_ctrl = wx.TextCtrl(scrolled, value=cfg.destination_folder)
+        self._dest_ctrl.SetName("Destination folder")
+        folder_grid.Add(self._dest_ctrl, flag=wx.EXPAND)
+        browse_dst = wx.Button(scrolled, label="Browse\u2026")
+        browse_dst.Bind(wx.EVT_BUTTON, self._browse_dest)
+        folder_grid.Add(browse_dst, flag=wx.RIGHT, border=10)
 
-        self._subdirs_var = tk.BooleanVar(value=cfg.copy_subdirectories)
-        ttk.Checkbutton(
-            folder_frame, text="Include subdirectories", variable=self._subdirs_var
-        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=10, pady=4)
+        folder_sizer.Add(folder_grid, flag=wx.EXPAND | wx.ALL, border=4)
+
+        self._subdirs_cb = wx.CheckBox(scrolled, label="Include subdirectories")
+        self._subdirs_cb.SetValue(cfg.copy_subdirectories)
+        self._subdirs_cb.SetName("Include subdirectories")
+        folder_sizer.Add(self._subdirs_cb, flag=wx.LEFT | wx.BOTTOM, border=10)
+
+        main_sizer.Add(
+            folder_sizer,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
+        )
 
         # ============ Timing ============
-        timing_frame = ttk.LabelFrame(main, text="Timing", padding=8)
-        timing_frame.grid(
-            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
-        )
-        timing_frame.columnconfigure(1, weight=1)
-        row += 1
+        timing_box = wx.StaticBox(scrolled, label="Timing")
+        timing_sizer = wx.StaticBoxSizer(timing_box, wx.VERTICAL)
+        timing_grid = wx.FlexGridSizer(cols=2, vgap=6, hgap=5)
+        timing_grid.AddGrowableCol(1, 1)
 
-        ttk.Label(timing_frame, text="Check interval (seconds):").grid(
-            row=0, column=0, sticky="w", padx=(10, 5), pady=6
+        lbl = wx.StaticText(scrolled, label="Check interval (seconds):")
+        timing_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._interval_spin = wx.SpinCtrl(
+            scrolled, value=str(cfg.check_interval), min=5, max=3600, size=(100, -1)
         )
-        self._interval_var = tk.StringVar(value=str(cfg.check_interval))
-        ttk.Spinbox(
-            timing_frame, from_=5, to=3600, textvariable=self._interval_var, width=8
-        ).grid(row=0, column=1, sticky="w", padx=5, pady=6)
+        self._interval_spin.SetName("Check interval seconds")
+        timing_grid.Add(self._interval_spin, flag=wx.RIGHT, border=10)
 
-        ttk.Label(timing_frame, text="Stable time before copy (seconds):").grid(
-            row=1, column=0, sticky="w", padx=(10, 5), pady=6
+        lbl = wx.StaticText(scrolled, label="Stable time before copy (seconds):")
+        timing_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._stable_spin = wx.SpinCtrl(
+            scrolled, value=str(cfg.stable_time), min=0, max=3600, size=(100, -1)
         )
-        self._stable_var = tk.StringVar(value=str(cfg.stable_time))
-        ttk.Spinbox(
-            timing_frame, from_=0, to=3600, textvariable=self._stable_var, width=8
-        ).grid(row=1, column=1, sticky="w", padx=5, pady=6)
+        self._stable_spin.SetName("Stable time seconds")
+        timing_grid.Add(self._stable_spin, flag=wx.RIGHT, border=10)
+
+        timing_sizer.Add(timing_grid, flag=wx.EXPAND | wx.ALL, border=4)
+        main_sizer.Add(
+            timing_sizer,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
+        )
 
         # ============ File Filters & Gating ============
-        filter_frame = ttk.LabelFrame(main, text="File Filters", padding=8)
-        filter_frame.grid(
-            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
-        )
-        filter_frame.columnconfigure(1, weight=1)
-        row += 1
+        filter_box = wx.StaticBox(scrolled, label="File Filters")
+        filter_sizer = wx.StaticBoxSizer(filter_box, wx.VERTICAL)
+        filter_grid = wx.FlexGridSizer(cols=2, vgap=6, hgap=5)
+        filter_grid.AddGrowableCol(1, 1)
 
-        ttk.Label(
-            filter_frame, text="File extensions (comma-separated, blank=all):"
-        ).grid(row=0, column=0, sticky="w", padx=(10, 5), pady=6)
-        self._ext_var = tk.StringVar(value=", ".join(cfg.file_extensions))
-        ttk.Entry(filter_frame, textvariable=self._ext_var, width=30).grid(
-            row=0, column=1, sticky="we", padx=5, pady=6
+        lbl = wx.StaticText(
+            scrolled,
+            label="File extensions (comma-separated, blank=all):",
         )
+        filter_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._ext_ctrl = wx.TextCtrl(scrolled, value=", ".join(cfg.file_extensions))
+        self._ext_ctrl.SetName("File extensions")
+        filter_grid.Add(self._ext_ctrl, flag=wx.EXPAND | wx.RIGHT, border=10)
 
-        ttk.Label(
-            filter_frame, text="Include patterns (comma-separated globs, blank=all):"
-        ).grid(row=1, column=0, sticky="w", padx=(10, 5), pady=6)
-        self._include_var = tk.StringVar(value=", ".join(cfg.include_patterns))
-        ttk.Entry(filter_frame, textvariable=self._include_var, width=30).grid(
-            row=1, column=1, sticky="we", padx=5, pady=6
+        lbl = wx.StaticText(
+            scrolled,
+            label="Include patterns (comma-separated globs, blank=all):",
         )
-        ttk.Label(
-            filter_frame,
-            text="e.g.  ACB_*, *_stream_*.mp4",
-            style="Hint.TLabel",
-        ).grid(row=2, column=1, sticky="w", padx=5, pady=(0, 4))
+        filter_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._include_ctrl = wx.TextCtrl(
+            scrolled, value=", ".join(cfg.include_patterns)
+        )
+        self._include_ctrl.SetName("Include patterns")
+        filter_grid.Add(self._include_ctrl, flag=wx.EXPAND | wx.RIGHT, border=10)
 
-        ttk.Label(filter_frame, text="Exclude patterns (comma-separated globs):").grid(
-            row=3, column=0, sticky="w", padx=(10, 5), pady=6
-        )
-        self._exclude_var = tk.StringVar(value=", ".join(cfg.exclude_patterns))
-        ttk.Entry(filter_frame, textvariable=self._exclude_var, width=30).grid(
-            row=3, column=1, sticky="we", padx=5, pady=6
-        )
-        ttk.Label(
-            filter_frame, text="e.g.  *.tmp, ~*, thumbs.db", style="Hint.TLabel"
-        ).grid(row=4, column=1, sticky="w", padx=5, pady=(0, 4))
+        # Hint
+        filter_grid.AddSpacer(0)
+        hint = wx.StaticText(scrolled, label="e.g.  ACB_*, *_stream_*.mp4")
+        hint.SetForegroundColour(wx.Colour(110, 110, 110))
+        filter_grid.Add(hint, flag=wx.LEFT | wx.RIGHT, border=10)
 
-        ttk.Label(filter_frame, text="Minimum file size (bytes, 0=none):").grid(
-            row=5, column=0, sticky="w", padx=(10, 5), pady=6
+        lbl = wx.StaticText(scrolled, label="Exclude patterns (comma-separated globs):")
+        filter_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._exclude_ctrl = wx.TextCtrl(
+            scrolled, value=", ".join(cfg.exclude_patterns)
         )
-        self._min_size_var = tk.StringVar(value=str(cfg.min_file_size))
-        ttk.Spinbox(
-            filter_frame,
-            from_=0,
-            to=999999999999,
-            textvariable=self._min_size_var,
-            width=14,
-        ).grid(row=5, column=1, sticky="w", padx=5, pady=6)
+        self._exclude_ctrl.SetName("Exclude patterns")
+        filter_grid.Add(self._exclude_ctrl, flag=wx.EXPAND | wx.RIGHT, border=10)
 
-        ttk.Label(filter_frame, text="Maximum file size (bytes, 0=none):").grid(
-            row=6, column=0, sticky="w", padx=(10, 5), pady=6
+        # Hint
+        filter_grid.AddSpacer(0)
+        hint = wx.StaticText(scrolled, label="e.g.  *.tmp, ~*, thumbs.db")
+        hint.SetForegroundColour(wx.Colour(110, 110, 110))
+        filter_grid.Add(hint, flag=wx.LEFT | wx.RIGHT, border=10)
+
+        lbl = wx.StaticText(scrolled, label="Minimum file size (bytes, 0=none):")
+        filter_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._min_size_spin = wx.SpinCtrl(
+            scrolled, value=str(cfg.min_file_size), min=0, max=999999999, size=(140, -1)
         )
-        self._max_size_var = tk.StringVar(value=str(cfg.max_file_size))
-        ttk.Spinbox(
-            filter_frame,
-            from_=0,
-            to=999999999999,
-            textvariable=self._max_size_var,
-            width=14,
-        ).grid(row=6, column=1, sticky="w", padx=5, pady=6)
+        self._min_size_spin.SetName("Minimum file size bytes")
+        filter_grid.Add(self._min_size_spin, flag=wx.RIGHT, border=10)
+
+        lbl = wx.StaticText(scrolled, label="Maximum file size (bytes, 0=none):")
+        filter_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._max_size_spin = wx.SpinCtrl(
+            scrolled, value=str(cfg.max_file_size), min=0, max=999999999, size=(140, -1)
+        )
+        self._max_size_spin.SetName("Maximum file size bytes")
+        filter_grid.Add(self._max_size_spin, flag=wx.RIGHT, border=10)
+
+        filter_sizer.Add(filter_grid, flag=wx.EXPAND | wx.ALL, border=4)
+        main_sizer.Add(
+            filter_sizer,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
+        )
 
         # ============ Collision Protection ============
-        col_frame = ttk.LabelFrame(main, text="Collision Protection", padding=8)
-        col_frame.grid(
-            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
-        )
-        col_frame.columnconfigure(1, weight=1)
-        row += 1
+        col_box = wx.StaticBox(scrolled, label="Collision Protection")
+        col_sizer = wx.StaticBoxSizer(col_box, wx.VERTICAL)
+        col_grid = wx.FlexGridSizer(cols=2, vgap=6, hgap=5)
+        col_grid.AddGrowableCol(1, 1)
 
-        ttk.Label(col_frame, text="When destination file exists:").grid(
-            row=0, column=0, sticky="w", padx=(10, 5), pady=6
-        )
+        lbl = wx.StaticText(scrolled, label="When destination file exists:")
+        col_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        collision_labels = list(_COLLISION_LABELS.values())
         current_label = _COLLISION_LABELS.get(
             cfg.collision_mode, _COLLISION_LABELS[COLLISION_RENAME]
         )
-        self._collision_var = tk.StringVar(value=current_label)
-        combo = ttk.Combobox(
-            col_frame,
-            textvariable=self._collision_var,
-            values=list(_COLLISION_LABELS.values()),
-            state="readonly",
-            width=24,
-        )
-        combo.grid(row=0, column=1, sticky="w", padx=5, pady=6)
+        self._collision_choice = wx.Choice(scrolled, choices=collision_labels)
+        self._collision_choice.SetName("Collision mode")
+        if current_label in collision_labels:
+            idx = collision_labels.index(current_label)
+        else:
+            idx = 0
+        self._collision_choice.SetSelection(idx)
+        col_grid.Add(self._collision_choice, flag=wx.RIGHT, border=10)
 
-        ttk.Label(col_frame, text="Rename pattern:").grid(
-            row=1, column=0, sticky="w", padx=(10, 5), pady=6
-        )
-        self._rename_var = tk.StringVar(value=cfg.rename_pattern)
-        ttk.Entry(col_frame, textvariable=self._rename_var, width=30).grid(
-            row=1, column=1, sticky="we", padx=5, pady=6
-        )
-        ttk.Label(col_frame, text=RENAME_PATTERN_HELP, wraplength=400).grid(
-            row=2, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 4)
+        lbl = wx.StaticText(scrolled, label="Rename pattern:")
+        col_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._rename_ctrl = wx.TextCtrl(scrolled, value=cfg.rename_pattern)
+        self._rename_ctrl.SetName("Rename pattern")
+        col_grid.Add(self._rename_ctrl, flag=wx.EXPAND | wx.RIGHT, border=10)
+
+        # Help text spanning both columns
+        col_grid.AddSpacer(0)
+        help_lbl = wx.StaticText(scrolled, label=RENAME_PATTERN_HELP)
+        help_lbl.Wrap(400)
+        col_grid.Add(help_lbl, flag=wx.LEFT | wx.RIGHT, border=10)
+
+        col_sizer.Add(col_grid, flag=wx.EXPAND | wx.ALL, border=4)
+        main_sizer.Add(
+            col_sizer,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
         )
 
         # ============ Verification & Retry ============
-        ver_frame = ttk.LabelFrame(main, text="Copy Verification & Retry", padding=8)
-        ver_frame.grid(
-            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
-        )
-        ver_frame.columnconfigure(1, weight=1)
-        row += 1
+        ver_box = wx.StaticBox(scrolled, label="Copy Verification & Retry")
+        ver_sizer = wx.StaticBoxSizer(ver_box, wx.VERTICAL)
+        ver_grid = wx.FlexGridSizer(cols=2, vgap=6, hgap=5)
+        ver_grid.AddGrowableCol(1, 1)
 
-        self._verify_var = tk.BooleanVar(value=cfg.verify_copies)
-        ttk.Checkbutton(
-            ver_frame,
-            text="Verify copies with SHA-256 checksum",
-            variable=self._verify_var,
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4)
-
-        ttk.Label(ver_frame, text="Retry count on failure:").grid(
-            row=1, column=0, sticky="w", padx=(10, 5), pady=6
+        self._verify_cb = wx.CheckBox(
+            scrolled, label="Verify copies with SHA-256 checksum"
         )
-        self._retry_var = tk.StringVar(value=str(cfg.retry_count))
-        ttk.Spinbox(
-            ver_frame, from_=0, to=10, textvariable=self._retry_var, width=6
-        ).grid(row=1, column=1, sticky="w", padx=5, pady=6)
+        self._verify_cb.SetValue(cfg.verify_copies)
+        self._verify_cb.SetName("Verify copies with SHA-256 checksum")
+        ver_sizer.Add(self._verify_cb, flag=wx.LEFT | wx.TOP, border=10)
 
-        ttk.Label(ver_frame, text="Retry delay (seconds):").grid(
-            row=2, column=0, sticky="w", padx=(10, 5), pady=6
+        lbl = wx.StaticText(scrolled, label="Retry count on failure:")
+        ver_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._retry_spin = wx.SpinCtrl(
+            scrolled, value=str(cfg.retry_count), min=0, max=10, size=(80, -1)
         )
-        self._retry_delay_var = tk.StringVar(value=str(cfg.retry_delay))
-        ttk.Spinbox(
-            ver_frame, from_=1, to=300, textvariable=self._retry_delay_var, width=6
-        ).grid(row=2, column=1, sticky="w", padx=5, pady=6)
+        self._retry_spin.SetName("Retry count")
+        ver_grid.Add(self._retry_spin, flag=wx.RIGHT, border=10)
+
+        lbl = wx.StaticText(scrolled, label="Retry delay (seconds):")
+        ver_grid.Add(lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=10)
+        self._retry_delay_spin = wx.SpinCtrl(
+            scrolled, value=str(cfg.retry_delay), min=1, max=300, size=(80, -1)
+        )
+        self._retry_delay_spin.SetName("Retry delay seconds")
+        ver_grid.Add(self._retry_delay_spin, flag=wx.RIGHT, border=10)
+
+        ver_sizer.Add(ver_grid, flag=wx.EXPAND | wx.ALL, border=4)
+        main_sizer.Add(
+            ver_sizer,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
+        )
 
         # ============ Notifications ============
-        notif_frame = ttk.LabelFrame(main, text="Notifications", padding=8)
-        notif_frame.grid(
-            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
-        )
-        notif_frame.columnconfigure(1, weight=1)
-        row += 1
+        notif_box = wx.StaticBox(scrolled, label="Notifications")
+        notif_sizer = wx.StaticBoxSizer(notif_box, wx.VERTICAL)
 
-        self._sound_var = tk.BooleanVar(value=cfg.play_sound_on_error)
-        ttk.Checkbutton(
-            notif_frame,
-            text="Play system sound on copy failure",
-            variable=self._sound_var,
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4)
+        self._sound_cb = wx.CheckBox(
+            scrolled, label="Play system sound on copy failure"
+        )
+        self._sound_cb.SetValue(cfg.play_sound_on_error)
+        self._sound_cb.SetName("Play system sound on copy failure")
+        notif_sizer.Add(self._sound_cb, flag=wx.ALL, border=10)
+
+        main_sizer.Add(
+            notif_sizer,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
+        )
 
         # ============ Global Hotkeys ============
-        hk_frame = ttk.LabelFrame(
-            main,
-            text="Global Hotkeys  (click Record, then press your shortcut)",
-            padding=8,
+        hk_box = wx.StaticBox(
+            scrolled,
+            label="Global Hotkeys  (click Record, then press your shortcut)",
         )
-        hk_frame.grid(
-            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        hk_sizer = wx.StaticBoxSizer(hk_box, wx.VERTICAL)
+        hk_grid = wx.FlexGridSizer(cols=2, vgap=6, hgap=5)
+        hk_grid.AddGrowableCol(1, 1)
+
+        self._hk_pause = HotkeyRecorder(
+            scrolled, hk_grid, "Pause / Resume:", cfg.hotkey_pause_resume
         )
-        hk_frame.columnconfigure(1, weight=1)
-        row += 1
+        self._hk_copy = HotkeyRecorder(
+            scrolled, hk_grid, "Copy Now:", cfg.hotkey_copy_now
+        )
+        self._hk_status = HotkeyRecorder(
+            scrolled, hk_grid, "Show Status:", cfg.hotkey_status
+        )
+        self._hk_settings = HotkeyRecorder(
+            scrolled, hk_grid, "Show Settings:", cfg.hotkey_settings
+        )
+        self._hk_quit = HotkeyRecorder(
+            scrolled, hk_grid, "Quit Application:", cfg.hotkey_quit
+        )
 
-        self._hk_pause_var = tk.StringVar(value=cfg.hotkey_pause_resume)
-        HotkeyRecorder(hk_frame, 0, "Pause / Resume:", self._hk_pause_var)
-
-        self._hk_copy_var = tk.StringVar(value=cfg.hotkey_copy_now)
-        HotkeyRecorder(hk_frame, 1, "Copy Now:", self._hk_copy_var)
-
-        self._hk_status_var = tk.StringVar(value=cfg.hotkey_status)
-        HotkeyRecorder(hk_frame, 2, "Show Status:", self._hk_status_var)
-
-        self._hk_settings_var = tk.StringVar(value=cfg.hotkey_settings)
-        HotkeyRecorder(hk_frame, 3, "Show Settings:", self._hk_settings_var)
-
-        self._hk_quit_var = tk.StringVar(value=cfg.hotkey_quit)
-        HotkeyRecorder(hk_frame, 4, "Quit Application:", self._hk_quit_var)
+        hk_sizer.Add(hk_grid, flag=wx.EXPAND | wx.ALL, border=4)
+        main_sizer.Add(
+            hk_sizer,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
+        )
 
         # ============ Startup ============
-        startup_frame = ttk.LabelFrame(main, text="Startup", padding=8)
-        startup_frame.grid(
-            row=row, column=0, columnspan=3, sticky="we", padx=10, pady=(0, 8)
+        startup_box = wx.StaticBox(scrolled, label="Startup")
+        startup_sizer = wx.StaticBoxSizer(startup_box, wx.VERTICAL)
+
+        self._minimized_cb = wx.CheckBox(scrolled, label="Start minimized to tray")
+        self._minimized_cb.SetValue(cfg.start_minimized)
+        self._minimized_cb.SetName("Start minimized to tray")
+        startup_sizer.Add(self._minimized_cb, flag=wx.LEFT | wx.TOP, border=10)
+
+        self._startup_cb = wx.CheckBox(scrolled, label="Start at login")
+        self._startup_cb.SetValue(cfg.start_with_windows)
+        self._startup_cb.SetName("Start at login")
+        startup_sizer.Add(self._startup_cb, flag=wx.LEFT | wx.BOTTOM, border=10)
+
+        main_sizer.Add(
+            startup_sizer,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
         )
-        startup_frame.columnconfigure(1, weight=1)
-        row += 1
-
-        self._minimized_var = tk.BooleanVar(value=cfg.start_minimized)
-        ttk.Checkbutton(
-            startup_frame, text="Start minimized to tray", variable=self._minimized_var
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=4)
-
-        self._startup_var = tk.BooleanVar(value=cfg.start_with_windows)
-        ttk.Checkbutton(
-            startup_frame, text="Start at login", variable=self._startup_var
-        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=10, pady=4)
 
         # ---- Buttons ----
-        btn_frame = ttk.Frame(main)
-        btn_frame.grid(row=row, column=0, columnspan=3, pady=(12, 5))
-        row += 1
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        save_btn = wx.Button(scrolled, label="Save")
+        save_btn.Bind(wx.EVT_BUTTON, self._on_save)
+        btn_sizer.Add(save_btn, flag=wx.RIGHT, border=8)
 
-        ttk.Button(btn_frame, text="Save", command=self._on_save).pack(
-            side="left", padx=8
-        )
-        ttk.Button(btn_frame, text="Cancel", command=self._on_close).pack(
-            side="left", padx=8
+        cancel_btn = wx.Button(scrolled, label="Cancel")
+        cancel_btn.Bind(wx.EVT_BUTTON, lambda e: self._on_close())
+        btn_sizer.Add(cancel_btn)
+
+        main_sizer.Add(
+            btn_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.TOP | wx.BOTTOM, border=12
         )
 
-        win = self._win
-        if win:
-            win.after(100, lambda w=win: w.focus_force())
+        scrolled.SetSizer(main_sizer)
+
+        # Outer sizer for the dialog to hold the scrolled window
+        dlg_sizer = wx.BoxSizer(wx.VERTICAL)
+        dlg_sizer.Add(scrolled, proportion=1, flag=wx.EXPAND)
+        self._win.SetSizer(dlg_sizer)
+
+        self._win.Show()
+        wx.CallAfter(self._win.Raise)
+
+    def _on_char_hook(self, event: wx.KeyEvent) -> None:
+        if event.GetKeyCode() == wx.WXK_ESCAPE:
+            self._on_close()
+        else:
+            event.Skip()
 
     # ---- browse helpers ----
 
-    def _browse_source(self) -> None:
-        folder = filedialog.askdirectory(
-            title="Select Source Folder",
-            initialdir=self._source_var.get() or None,
+    def _browse_source(self, event: wx.CommandEvent) -> None:
+        dlg = wx.DirDialog(
+            self._win,
+            "Select Source Folder",
+            defaultPath=self._source_ctrl.GetValue() or "",
         )
-        if folder:
-            self._source_var.set(folder)
+        if dlg.ShowModal() == wx.ID_OK:
+            self._source_ctrl.SetValue(dlg.GetPath())
+        dlg.Destroy()
 
-    def _browse_dest(self) -> None:
-        folder = filedialog.askdirectory(
-            title="Select Destination Folder",
-            initialdir=self._dest_var.get() or None,
+    def _browse_dest(self, event: wx.CommandEvent) -> None:
+        dlg = wx.DirDialog(
+            self._win,
+            "Select Destination Folder",
+            defaultPath=self._dest_ctrl.GetValue() or "",
         )
-        if folder:
-            self._dest_var.set(folder)
+        if dlg.ShowModal() == wx.ID_OK:
+            self._dest_ctrl.SetValue(dlg.GetPath())
+        dlg.Destroy()
 
     # ---- save / cancel ----
 
-    def _on_save(self) -> None:
-        source = self._source_var.get().strip()
-        dest = self._dest_var.get().strip()
+    def _on_save(self, event: wx.CommandEvent) -> None:
+        source = self._source_ctrl.GetValue().strip()
+        dest = self._dest_ctrl.GetValue().strip()
 
         if not source:
-            messagebox.showerror(
-                "Validation Error",
+            wx.MessageBox(
                 "Source folder is required.",
-                parent=cast(tk.Misc, self._win),
+                "Validation Error",
+                wx.OK | wx.ICON_ERROR,
+                self._win,
             )
             return
         if not dest:
-            messagebox.showerror(
-                "Validation Error",
+            wx.MessageBox(
                 "Destination folder is required.",
-                parent=cast(tk.Misc, self._win),
+                "Validation Error",
+                wx.OK | wx.ICON_ERROR,
+                self._win,
             )
             return
         if not os.path.isdir(source):
-            messagebox.showerror(
-                "Validation Error",
+            wx.MessageBox(
                 f"Source folder does not exist:\n{source}",
-                parent=cast(tk.Misc, self._win),
+                "Validation Error",
+                wx.OK | wx.ICON_ERROR,
+                self._win,
             )
             return
 
-        try:
-            interval = int(self._interval_var.get())
-            if interval < 5:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror(
-                "Validation Error",
-                "Check interval must be a number of at least 5 seconds.",
-                parent=cast(tk.Misc, self._win),
-            )
-            return
-
-        try:
-            stable = int(self._stable_var.get())
-            if stable < 0:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror(
-                "Validation Error",
-                "Stable time must be a non-negative number.",
-                parent=cast(tk.Misc, self._win),
-            )
-            return
-
-        try:
-            min_size = int(self._min_size_var.get())
-            max_size = int(self._max_size_var.get())
-        except ValueError:
-            messagebox.showerror(
-                "Validation Error",
-                "File size limits must be numbers.",
-                parent=cast(tk.Misc, self._win),
-            )
-            return
-
-        try:
-            retry_count = int(self._retry_var.get())
-            retry_delay = int(self._retry_delay_var.get())
-        except ValueError:
-            messagebox.showerror(
-                "Validation Error",
-                "Retry count and delay must be numbers.",
-                parent=cast(tk.Misc, self._win),
-            )
-            return
+        interval = self._interval_spin.GetValue()
+        stable = self._stable_spin.GetValue()
+        min_size = self._min_size_spin.GetValue()
+        max_size = self._max_size_spin.GetValue()
+        retry_count = self._retry_spin.GetValue()
+        retry_delay = self._retry_delay_spin.GetValue()
 
         # Check for duplicate hotkey assignments
-        hotkeys = {}
+        hotkeys: dict[str, str] = {}
         hk_fields = {
-            "Pause / Resume": self._hk_pause_var.get().strip(),
-            "Copy Now": self._hk_copy_var.get().strip(),
-            "Show Status": self._hk_status_var.get().strip(),
-            "Show Settings": self._hk_settings_var.get().strip(),
-            "Quit": self._hk_quit_var.get().strip(),
+            "Pause / Resume": self._hk_pause.GetValue().strip(),
+            "Copy Now": self._hk_copy.GetValue().strip(),
+            "Show Status": self._hk_status.GetValue().strip(),
+            "Show Settings": self._hk_settings.GetValue().strip(),
+            "Quit": self._hk_quit.GetValue().strip(),
         }
         for label, key in hk_fields.items():
             if not key or key == "Press keys\u2026":
                 continue
             if key in hotkeys:
-                messagebox.showerror(
-                    "Validation Error",
+                wx.MessageBox(
                     f'Duplicate hotkey "{key}" assigned to both '
                     f'"{hotkeys[key]}" and "{label}".',
-                    parent=cast(tk.Misc, self._win),
+                    "Validation Error",
+                    wx.OK | wx.ICON_ERROR,
+                    self._win,
                 )
                 return
             hotkeys[key] = label
 
         # Resolve collision mode from label back to value
-        collision_label = self._collision_var.get()
-        collision_mode = COLLISION_RENAME
-        for key, label in _COLLISION_LABELS.items():
-            if label == collision_label:
-                collision_mode = key
-                break
+        collision_sel = self._collision_choice.GetSelection()
+        if collision_sel != wx.NOT_FOUND:
+            collision_mode = _COLLISION_VALUES[collision_sel]
+        else:
+            collision_mode = COLLISION_RENAME
 
         cfg = self._app.config
         cfg.source_folder = source
@@ -757,73 +695,68 @@ class SettingsWindow:
         cfg.check_interval = interval
         cfg.stable_time = stable
         cfg.file_extensions = [
-            e.strip() for e in self._ext_var.get().split(",") if e.strip()
+            e.strip() for e in self._ext_ctrl.GetValue().split(",") if e.strip()
         ]
         cfg.include_patterns = [
-            p.strip() for p in self._include_var.get().split(",") if p.strip()
+            p.strip() for p in self._include_ctrl.GetValue().split(",") if p.strip()
         ]
         cfg.exclude_patterns = [
-            p.strip() for p in self._exclude_var.get().split(",") if p.strip()
+            p.strip() for p in self._exclude_ctrl.GetValue().split(",") if p.strip()
         ]
-        cfg.copy_subdirectories = self._subdirs_var.get()
-        cfg.start_minimized = self._minimized_var.get()
-        cfg.start_with_windows = self._startup_var.get()
+        cfg.copy_subdirectories = self._subdirs_cb.GetValue()
+        cfg.start_minimized = self._minimized_cb.GetValue()
+        cfg.start_with_windows = self._startup_cb.GetValue()
         cfg.collision_mode = collision_mode
-        cfg.rename_pattern = self._rename_var.get().strip() or DEFAULT_RENAME_PATTERN
-        cfg.verify_copies = self._verify_var.get()
+        cfg.rename_pattern = (
+            self._rename_ctrl.GetValue().strip()
+            or DEFAULT_RENAME_PATTERN
+        )
+        cfg.verify_copies = self._verify_cb.GetValue()
         cfg.min_file_size = min_size
         cfg.max_file_size = max_size
         cfg.retry_count = retry_count
         cfg.retry_delay = retry_delay
-        cfg.play_sound_on_error = self._sound_var.get()
-        # Hotkeys — normalise "Press keys…" placeholder to empty
+        cfg.play_sound_on_error = self._sound_cb.GetValue()
+        # Hotkeys — normalise "Press keys..." placeholder to empty
         cfg.hotkey_pause_resume = (
-            ""
-            if self._hk_pause_var.get() == "Press keys\u2026"
-            else self._hk_pause_var.get()
+            "" if self._hk_pause.GetValue() == "Press keys\u2026"
+            else self._hk_pause.GetValue()
         )
         cfg.hotkey_copy_now = (
-            ""
-            if self._hk_copy_var.get() == "Press keys\u2026"
-            else self._hk_copy_var.get()
+            "" if self._hk_copy.GetValue() == "Press keys\u2026"
+            else self._hk_copy.GetValue()
         )
         cfg.hotkey_status = (
-            ""
-            if self._hk_status_var.get() == "Press keys\u2026"
-            else self._hk_status_var.get()
+            "" if self._hk_status.GetValue() == "Press keys\u2026"
+            else self._hk_status.GetValue()
         )
         cfg.hotkey_settings = (
-            ""
-            if self._hk_settings_var.get() == "Press keys\u2026"
-            else self._hk_settings_var.get()
+            "" if self._hk_settings.GetValue() == "Press keys\u2026"
+            else self._hk_settings.GetValue()
         )
         cfg.hotkey_quit = (
-            ""
-            if self._hk_quit_var.get() == "Press keys\u2026"
-            else self._hk_quit_var.get()
+            "" if self._hk_quit.GetValue() == "Press keys\u2026"
+            else self._hk_quit.GetValue()
         )
         cfg.save()
 
         # Restart the watcher with new settings
         self._app.restart_sync()
 
-        messagebox.showinfo(
-            "Settings Saved",
+        wx.MessageBox(
             "Settings saved successfully.",
-            parent=cast(tk.Misc, self._win),
+            "Settings Saved",
+            wx.OK | wx.ICON_INFORMATION,
+            self._win,
         )
+        self._on_close()
+
+    def _on_close_event(self, event: wx.CloseEvent) -> None:
         self._on_close()
 
     def _on_close(self) -> None:
         if self._win:
-            # Unbind mousewheel to avoid errors after window closed
-            try:
-                canvas_widget = self._win.winfo_children()[1]  # canvas
-                canvas_widget.unbind_all("<MouseWheel>")
-            except Exception:
-                pass
-            self._win.grab_release()
-            self._win.destroy()
+            self._win.Destroy()
             self._win = None
 
 
@@ -838,134 +771,141 @@ class StatusWindow:
     def __init__(self, app: "App"):
         """Create the status window (hidden until ``show`` is called)."""
         self._app = app
-        self._win: tk.Toplevel | None = None
-        self._status_label: ttk.Label | None = None
-        self._stats_label: ttk.Label | None = None
-        self._detail_text: tk.Text | None = None
-        self._tree: ttk.Treeview | None = None
-        self._update_job: str | None = None
+        self._win: wx.Frame | None = None
+        self._status_label: wx.StaticText | None = None
+        self._stats_label: wx.StaticText | None = None
+        self._list_ctrl: wx.ListCtrl | None = None
+        self._timer: wx.Timer | None = None
+        self._sync_btn: wx.Button | None = None
 
     def show(self) -> None:
         """Show or focus the status window."""
-        if self._win is not None and self._win.winfo_exists():
-            self._win.lift()
-            self._win.focus_force()
+        if self._win is not None:
+            self._win.Raise()
+            self._win.SetFocus()
             return
         self._build()
 
     def _build(self) -> None:
-        self._win = tk.Toplevel()
-        self._win.title("Stream Watcher \u2014 Status")
-        self._win.geometry("780x580")
-        self._win.minsize(600, 440)
-        self._win.resizable(True, True)
-        _apply_theme(self._win)
+        self._win = wx.Frame(
+            None,
+            title="Stream Watcher \u2014 Status",
+            size=(780, 580),
+            style=wx.DEFAULT_FRAME_STYLE,
+        )
+        self._win.SetMinSize((600, 440))
+        self._win.Bind(wx.EVT_CLOSE, self._on_close_event)
+        self._win.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
 
-        self._win.protocol("WM_DELETE_WINDOW", self._on_close)
-        self._win.bind("<Escape>", lambda e: self._on_close())
-
-        main = ttk.Frame(self._win, padding=10)
-        main.pack(fill="both", expand=True)
-        main.columnconfigure(0, weight=1)
-        main.rowconfigure(4, weight=1)
+        panel = wx.Panel(self._win)
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
 
         # ---- Header ----
-        ttk.Label(main, text="Sync Status", style="Header.TLabel").grid(
-            row=0, column=0, sticky="w", padx=10, pady=(5, 8)
-        )
+        header = wx.StaticText(panel, label="Sync Status")
+        header_font = header.GetFont()
+        header_font.SetPointSize(14)
+        header_font.MakeBold()
+        header.SetFont(header_font)
+        main_sizer.Add(header, flag=wx.ALL, border=10)
 
         # ---- Status summary ----
-        self._status_label = ttk.Label(
-            main, text="Initializing\u2026", style="Status.TLabel"
+        self._status_label = wx.StaticText(panel, label="Initializing\u2026")
+        self._status_label.SetName("Sync status")
+        main_sizer.Add(
+            self._status_label,
+            flag=wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
         )
-        self._status_label.grid(row=1, column=0, sticky="w", padx=10, pady=4)
 
-        self._stats_label = ttk.Label(main, text="", style="Status.TLabel")
-        self._stats_label.grid(row=2, column=0, sticky="w", padx=10, pady=4)
+        self._stats_label = wx.StaticText(panel, label="")
+        self._stats_label.SetName("Copy statistics")
+        main_sizer.Add(
+            self._stats_label,
+            flag=wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
+        )
 
         # ---- Hotkey hint ----
-        self._hint_label = ttk.Label(main, text="", style="Hint.TLabel")
-        self._hint_label.grid(row=3, column=0, sticky="w", padx=10, pady=(2, 6))
+        self._hint_label = wx.StaticText(panel, label="")
+        self._hint_label.SetForegroundColour(wx.Colour(110, 110, 110))
+        main_sizer.Add(self._hint_label, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=10)
         self._update_hint()
 
+        # ---- Copy history label ----
+        history_label = wx.StaticText(panel, label="Copy History:")
+        main_sizer.Add(history_label, flag=wx.LEFT | wx.RIGHT, border=10)
+
         # ---- Copy history table ----
-        ttk.Label(main, text="Copy History:").grid(
-            row=4, column=0, sticky="nw", padx=10, pady=(4, 2)
+        self._list_ctrl = wx.ListCtrl(
+            panel, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_SUNKEN
         )
+        self._list_ctrl.SetName("Copy history")
+        self._list_ctrl.InsertColumn(0, "Time", width=130)
+        self._list_ctrl.InsertColumn(1, "Status", width=60)
+        self._list_ctrl.InsertColumn(2, "Source File", width=200)
+        self._list_ctrl.InsertColumn(3, "Destination", width=200)
+        self._list_ctrl.InsertColumn(4, "Size", width=80)
+        self._list_ctrl.InsertColumn(5, "Verified", width=65)
 
-        tree_frame = ttk.Frame(main)
-        tree_frame.grid(row=5, column=0, sticky="nsew", padx=10, pady=(0, 6))
-        tree_frame.columnconfigure(0, weight=1)
-        tree_frame.rowconfigure(0, weight=1)
-        main.rowconfigure(5, weight=1)
-
-        columns = ("time", "status", "source", "destination", "size", "verified")
-        self._tree = ttk.Treeview(
-            tree_frame,
-            columns=columns,
-            show="headings",
-            selectmode="browse",
-            height=12,
+        main_sizer.Add(
+            self._list_ctrl,
+            proportion=1,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
         )
-        self._tree.heading("time", text="Time")
-        self._tree.heading("status", text="Status")
-        self._tree.heading("source", text="Source File")
-        self._tree.heading("destination", text="Destination")
-        self._tree.heading("size", text="Size")
-        self._tree.heading("verified", text="Verified")
-
-        self._tree.column("time", width=130, minwidth=100)
-        self._tree.column("status", width=60, minwidth=50)
-        self._tree.column("source", width=200, minwidth=120)
-        self._tree.column("destination", width=200, minwidth=120)
-        self._tree.column("size", width=80, minwidth=60)
-        self._tree.column("verified", width=65, minwidth=55)
-
-        self._tree.grid(row=0, column=0, sticky="nsew")
-
-        tree_scroll = ttk.Scrollbar(
-            tree_frame, orient="vertical", command=self._tree.yview
-        )
-        tree_scroll.grid(row=0, column=1, sticky="ns")
-        self._tree.configure(yscrollcommand=tree_scroll.set)
 
         # ---- Buttons ----
-        btn_frame = ttk.Frame(main)
-        btn_frame.grid(row=6, column=0, pady=(8, 5))
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        self._sync_btn = ttk.Button(
-            btn_frame, text="Pause Sync", command=self._toggle_sync
+        self._sync_btn = wx.Button(panel, label="Pause Sync")
+        self._sync_btn.Bind(wx.EVT_BUTTON, self._on_toggle_sync)
+        btn_sizer.Add(self._sync_btn, flag=wx.RIGHT, border=8)
+
+        copy_btn = wx.Button(panel, label="Copy Now")
+        copy_btn.Bind(wx.EVT_BUTTON, self._on_copy_now)
+        btn_sizer.Add(copy_btn, flag=wx.RIGHT, border=8)
+
+        log_btn = wx.Button(panel, label="View Log")
+        log_btn.Bind(wx.EVT_BUTTON, self._on_open_log)
+        btn_sizer.Add(log_btn, flag=wx.RIGHT, border=8)
+
+        settings_btn = wx.Button(panel, label="Settings")
+        settings_btn.Bind(wx.EVT_BUTTON, lambda e: self._app.on_open_settings())
+        btn_sizer.Add(settings_btn, flag=wx.RIGHT, border=8)
+
+        close_btn = wx.Button(panel, label="Close")
+        close_btn.Bind(wx.EVT_BUTTON, lambda e: self._on_close())
+        btn_sizer.Add(close_btn)
+
+        main_sizer.Add(
+            btn_sizer,
+            flag=wx.ALIGN_CENTER_HORIZONTAL | wx.BOTTOM,
+            border=10,
         )
-        self._sync_btn.pack(side="left", padx=8)
 
-        ttk.Button(btn_frame, text="Copy Now", command=self._copy_now).pack(
-            side="left", padx=8
-        )
+        panel.SetSizer(main_sizer)
 
-        ttk.Button(btn_frame, text="View Log", command=self._open_log).pack(
-            side="left", padx=8
-        )
+        # Start periodic update timer
+        self._timer = wx.Timer(self._win)
+        self._win.Bind(wx.EVT_TIMER, self._on_timer, self._timer)
+        self._timer.Start(2000)
 
-        ttk.Button(btn_frame, text="Settings", command=self._app.on_open_settings).pack(
-            side="left", padx=8
-        )
+        # Initial refresh
+        self._refresh()
 
-        ttk.Button(btn_frame, text="Close", command=self._on_close).pack(
-            side="left", padx=8
-        )
+        self._win.Show()
+        wx.CallAfter(self._win.Raise)
 
-        # Start periodic update
-        self._schedule_update()
-        win = self._win
-        if win:
-            win.after(100, lambda w=win: w.focus_force())
+    def _on_char_hook(self, event: wx.KeyEvent) -> None:
+        if event.GetKeyCode() == wx.WXK_ESCAPE:
+            self._on_close()
+        else:
+            event.Skip()
 
     # ---- periodic refresh ----
 
-    def _schedule_update(self) -> None:
-        if self._win and self._win.winfo_exists():
-            self._refresh()
-            self._update_job = self._win.after(2000, self._schedule_update)
+    def _on_timer(self, event: wx.TimerEvent) -> None:
+        self._refresh()
 
     def _update_hint(self) -> None:
         """Build and display the hotkey hint line from current config."""
@@ -983,32 +923,33 @@ class StatusWindow:
             parts.append(f"Quit = {cfg.hotkey_quit}")
         text = "Hotkeys:  " + "  |  ".join(parts) if parts else "No hotkeys configured."
         if self._hint_label:
-            self._hint_label.configure(text=text)
+            self._hint_label.SetLabel(text)
 
     def _refresh(self) -> None:
-        if not self._win or not self._win.winfo_exists():
+        if not self._win:
             return
 
         cfg = self._app.config
         enabled = cfg.sync_enabled
         configured = cfg.is_configured()
 
-        # Status text
+        # Status text and colour
         if not configured:
             status = (
                 "Not configured \u2014 open Settings"
                 " to set source and destination folders."
             )
-            style = "Error.TLabel"
+            colour = wx.Colour(196, 0, 26)  # ERROR_FG
         elif enabled:
             status = "Sync is ACTIVE \u2014 watching for new files."
-            style = "Success.TLabel"
+            colour = wx.Colour(10, 110, 10)  # SUCCESS_FG
         else:
             status = "Sync is PAUSED."
-            style = "Status.TLabel"
+            colour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOWTEXT)
 
         if self._status_label:
-            self._status_label.configure(text=status, style=style)
+            self._status_label.SetLabel(status)
+            self._status_label.SetForegroundColour(colour)
 
         # Stats
         copier = self._app.copier
@@ -1031,27 +972,22 @@ class StatusWindow:
                 parts.append(f"Stabilising: {pending}")
 
         if self._stats_label:
-            self._stats_label.configure(
-                text=" | ".join(parts) if parts else "No stats yet."
-            )
+            self._stats_label.SetLabel(" | ".join(parts) if parts else "No stats yet.")
 
         # Sync button label
         if self._sync_btn:
-            self._sync_btn.configure(text="Pause Sync" if enabled else "Resume Sync")
+            self._sync_btn.SetLabel("Pause Sync" if enabled else "Resume Sync")
 
         # History table
         self._update_history()
 
     def _update_history(self) -> None:
         copier = self._app.copier
-        if not copier or not self._tree:
+        if not copier or not self._list_ctrl:
             return
 
-        # Clear existing
-        for item in self._tree.get_children():
-            self._tree.delete(item)
+        self._list_ctrl.DeleteAllItems()
 
-        # Insert most recent first
         for rec in reversed(copier.stats.history[-200:]):
             if rec.skipped:
                 st = "Skip"
@@ -1069,34 +1005,45 @@ class StatusWindow:
                 else ("N/A" if rec.skipped else ("No" if rec.success else ""))
             )
 
-            self._tree.insert(
-                "",
-                "end",
-                values=(rec.timestamp_str, st, src_name, dst_name, size_str, ver),
+            idx = self._list_ctrl.InsertItem(
+                self._list_ctrl.GetItemCount(),
+                rec.timestamp_str,
             )
+            self._list_ctrl.SetItem(idx, 1, st)
+            self._list_ctrl.SetItem(idx, 2, src_name)
+            self._list_ctrl.SetItem(idx, 3, dst_name)
+            self._list_ctrl.SetItem(idx, 4, size_str)
+            self._list_ctrl.SetItem(idx, 5, ver)
 
     # ---- actions ----
 
-    def _toggle_sync(self) -> None:
+    def _on_toggle_sync(self, event: wx.CommandEvent) -> None:
         self._app.on_toggle_sync()
         self._refresh()
 
-    def _copy_now(self) -> None:
+    def _on_copy_now(self, event: wx.CommandEvent) -> None:
         self._app.on_copy_now()
 
-    def _open_log(self) -> None:
+    def _on_open_log(self, event: wx.CommandEvent) -> None:
         """Open the log file in the default text editor."""
         log_path = get_log_path()
         if log_path.exists():
             open_file_in_default_app(log_path)
         else:
-            messagebox.showinfo(
-                "Log File", "No log file exists yet.", parent=cast(tk.Misc, self._win)
+            wx.MessageBox(
+                "No log file exists yet.",
+                "Log File",
+                wx.OK | wx.ICON_INFORMATION,
+                self._win,
             )
 
+    def _on_close_event(self, event: wx.CloseEvent) -> None:
+        self._on_close()
+
     def _on_close(self) -> None:
-        if self._update_job and self._win:
-            self._win.after_cancel(self._update_job)
+        if self._timer:
+            self._timer.Stop()
+            self._timer = None
         if self._win:
-            self._win.destroy()
+            self._win.Destroy()
             self._win = None
