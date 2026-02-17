@@ -708,8 +708,7 @@ class SettingsWindow:
         cfg.start_with_windows = self._startup_cb.GetValue()
         cfg.collision_mode = collision_mode
         cfg.rename_pattern = (
-            self._rename_ctrl.GetValue().strip()
-            or DEFAULT_RENAME_PATTERN
+            self._rename_ctrl.GetValue().strip() or DEFAULT_RENAME_PATTERN
         )
         cfg.verify_copies = self._verify_cb.GetValue()
         cfg.min_file_size = min_size
@@ -719,23 +718,28 @@ class SettingsWindow:
         cfg.play_sound_on_error = self._sound_cb.GetValue()
         # Hotkeys — normalise "Press keys..." placeholder to empty
         cfg.hotkey_pause_resume = (
-            "" if self._hk_pause.GetValue() == "Press keys\u2026"
+            ""
+            if self._hk_pause.GetValue() == "Press keys\u2026"
             else self._hk_pause.GetValue()
         )
         cfg.hotkey_copy_now = (
-            "" if self._hk_copy.GetValue() == "Press keys\u2026"
+            ""
+            if self._hk_copy.GetValue() == "Press keys\u2026"
             else self._hk_copy.GetValue()
         )
         cfg.hotkey_status = (
-            "" if self._hk_status.GetValue() == "Press keys\u2026"
+            ""
+            if self._hk_status.GetValue() == "Press keys\u2026"
             else self._hk_status.GetValue()
         )
         cfg.hotkey_settings = (
-            "" if self._hk_settings.GetValue() == "Press keys\u2026"
+            ""
+            if self._hk_settings.GetValue() == "Press keys\u2026"
             else self._hk_settings.GetValue()
         )
         cfg.hotkey_quit = (
-            "" if self._hk_quit.GetValue() == "Press keys\u2026"
+            ""
+            if self._hk_quit.GetValue() == "Press keys\u2026"
             else self._hk_quit.GetValue()
         )
         cfg.save()
