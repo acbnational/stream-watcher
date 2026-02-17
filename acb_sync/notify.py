@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 _HAS_AO2 = False
 if IS_WINDOWS:
     try:
-        from accessible_output2.outputs.auto import (
+        from accessible_output2.outputs.auto import (  # type: ignore[import-not-found]
             Auto as _AO2Auto,  # type: ignore[import-untyped]
         )
 

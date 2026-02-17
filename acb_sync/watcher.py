@@ -156,15 +156,17 @@ class NewFileHandler(FileSystemEventHandler):
         """Handle a new file creation event."""
         if event.is_directory:
             return
-        if self._should_track(event.src_path):
-            self._tracker.track(Path(event.src_path))
+        src = str(event.src_path)
+        if self._should_track(src):
+            self._tracker.track(Path(src))
 
     def on_modified(self, event: FileModifiedEvent) -> None:  # type: ignore[override]
         """Handle a file modification event."""
         if event.is_directory:
             return
-        if self._should_track(event.src_path):
-            self._tracker.track(Path(event.src_path))
+        src = str(event.src_path)
+        if self._should_track(src):
+            self._tracker.track(Path(src))
 
 
 class FolderWatcher:

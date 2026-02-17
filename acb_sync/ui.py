@@ -263,18 +263,19 @@ class SettingsWindow:
     def _build(self) -> None:
         cfg = self._app.config
 
-        self._win = wx.Dialog(
+        win = wx.Dialog(
             None,
             title="Stream Watcher \u2014 Settings",
             size=(720, 780),
             style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
         )
-        self._win.SetMinSize((620, 680))
-        self._win.Bind(wx.EVT_CLOSE, self._on_close_event)
-        self._win.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        self._win = win
+        win.SetMinSize((620, 680))
+        win.Bind(wx.EVT_CLOSE, self._on_close_event)
+        win.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
 
         # Scrollable content area
-        scrolled = wx.ScrolledWindow(self._win, style=wx.VSCROLL)
+        scrolled = wx.ScrolledWindow(win, style=wx.VSCROLL)
         scrolled.SetScrollRate(0, 20)
 
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -588,10 +589,10 @@ class SettingsWindow:
         # Outer sizer for the dialog to hold the scrolled window
         dlg_sizer = wx.BoxSizer(wx.VERTICAL)
         dlg_sizer.Add(scrolled, proportion=1, flag=wx.EXPAND)
-        self._win.SetSizer(dlg_sizer)
+        win.SetSizer(dlg_sizer)
 
-        self._win.Show()
-        wx.CallAfter(self._win.Raise)
+        win.Show()
+        wx.CallAfter(win.Raise)
 
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
         if event.GetKeyCode() == wx.WXK_ESCAPE:
@@ -778,6 +779,7 @@ class StatusWindow:
         self._win: wx.Frame | None = None
         self._status_label: wx.StaticText | None = None
         self._stats_label: wx.StaticText | None = None
+        self._hint_label: wx.StaticText | None = None
         self._list_ctrl: wx.ListCtrl | None = None
         self._timer: wx.Timer | None = None
         self._sync_btn: wx.Button | None = None
@@ -791,17 +793,18 @@ class StatusWindow:
         self._build()
 
     def _build(self) -> None:
-        self._win = wx.Frame(
+        win = wx.Frame(
             None,
             title="Stream Watcher \u2014 Status",
             size=(780, 580),
             style=wx.DEFAULT_FRAME_STYLE,
         )
-        self._win.SetMinSize((600, 440))
-        self._win.Bind(wx.EVT_CLOSE, self._on_close_event)
-        self._win.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        self._win = win
+        win.SetMinSize((600, 440))
+        win.Bind(wx.EVT_CLOSE, self._on_close_event)
+        win.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
 
-        panel = wx.Panel(self._win)
+        panel = wx.Panel(win)
         main_sizer = wx.BoxSizer(wx.VERTICAL)
 
         # ---- Header ----
@@ -813,26 +816,33 @@ class StatusWindow:
         main_sizer.Add(header, flag=wx.ALL, border=10)
 
         # ---- Status summary ----
-        self._status_label = wx.StaticText(panel, label="Initializing\u2026")
-        self._status_label.SetName("Sync status")
+        status_label = wx.StaticText(panel, label="Initializing\u2026")
+        self._status_label = status_label
+        status_label.SetName("Sync status")
         main_sizer.Add(
-            self._status_label,
+            status_label,
             flag=wx.LEFT | wx.RIGHT | wx.BOTTOM,
             border=10,
         )
 
-        self._stats_label = wx.StaticText(panel, label="")
-        self._stats_label.SetName("Copy statistics")
+        stats_label = wx.StaticText(panel, label="")
+        self._stats_label = stats_label
+        stats_label.SetName("Copy statistics")
         main_sizer.Add(
-            self._stats_label,
+            stats_label,
             flag=wx.LEFT | wx.RIGHT | wx.BOTTOM,
             border=10,
         )
 
         # ---- Hotkey hint ----
-        self._hint_label = wx.StaticText(panel, label="")
-        self._hint_label.SetForegroundColour(wx.Colour(110, 110, 110))
-        main_sizer.Add(self._hint_label, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=10)
+        hint_label = wx.StaticText(panel, label="")
+        self._hint_label = hint_label
+        hint_label.SetForegroundColour(wx.Colour(110, 110, 110))
+        main_sizer.Add(
+            hint_label,
+            flag=wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            border=10,
+        )
         self._update_hint()
 
         # ---- Copy history label ----
@@ -840,19 +850,21 @@ class StatusWindow:
         main_sizer.Add(history_label, flag=wx.LEFT | wx.RIGHT, border=10)
 
         # ---- Copy history table ----
-        self._list_ctrl = wx.ListCtrl(
-            panel, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_SUNKEN
+        list_ctrl = wx.ListCtrl(
+            panel,
+            style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_SUNKEN,
         )
-        self._list_ctrl.SetName("Copy history")
-        self._list_ctrl.InsertColumn(0, "Time", width=130)
-        self._list_ctrl.InsertColumn(1, "Status", width=60)
-        self._list_ctrl.InsertColumn(2, "Source File", width=200)
-        self._list_ctrl.InsertColumn(3, "Destination", width=200)
-        self._list_ctrl.InsertColumn(4, "Size", width=80)
-        self._list_ctrl.InsertColumn(5, "Verified", width=65)
+        self._list_ctrl = list_ctrl
+        list_ctrl.SetName("Copy history")
+        list_ctrl.InsertColumn(0, "Time", width=130)
+        list_ctrl.InsertColumn(1, "Status", width=60)
+        list_ctrl.InsertColumn(2, "Source File", width=200)
+        list_ctrl.InsertColumn(3, "Destination", width=200)
+        list_ctrl.InsertColumn(4, "Size", width=80)
+        list_ctrl.InsertColumn(5, "Verified", width=65)
 
         main_sizer.Add(
-            self._list_ctrl,
+            list_ctrl,
             proportion=1,
             flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
             border=10,
@@ -861,9 +873,10 @@ class StatusWindow:
         # ---- Buttons ----
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        self._sync_btn = wx.Button(panel, label="Pause Sync")
-        self._sync_btn.Bind(wx.EVT_BUTTON, self._on_toggle_sync)
-        btn_sizer.Add(self._sync_btn, flag=wx.RIGHT, border=8)
+        sync_btn = wx.Button(panel, label="Pause Sync")
+        self._sync_btn = sync_btn
+        sync_btn.Bind(wx.EVT_BUTTON, self._on_toggle_sync)
+        btn_sizer.Add(sync_btn, flag=wx.RIGHT, border=8)
 
         copy_btn = wx.Button(panel, label="Copy Now")
         copy_btn.Bind(wx.EVT_BUTTON, self._on_copy_now)
@@ -874,7 +887,10 @@ class StatusWindow:
         btn_sizer.Add(log_btn, flag=wx.RIGHT, border=8)
 
         settings_btn = wx.Button(panel, label="Settings")
-        settings_btn.Bind(wx.EVT_BUTTON, lambda e: self._app.on_open_settings())
+        settings_btn.Bind(
+            wx.EVT_BUTTON,
+            lambda e: self._app.on_open_settings(),
+        )
         btn_sizer.Add(settings_btn, flag=wx.RIGHT, border=8)
 
         close_btn = wx.Button(panel, label="Close")
@@ -890,15 +906,16 @@ class StatusWindow:
         panel.SetSizer(main_sizer)
 
         # Start periodic update timer
-        self._timer = wx.Timer(self._win)
-        self._win.Bind(wx.EVT_TIMER, self._on_timer, self._timer)
-        self._timer.Start(2000)
+        timer = wx.Timer(win)
+        self._timer = timer
+        win.Bind(wx.EVT_TIMER, self._on_timer, timer)
+        timer.Start(2000)
 
         # Initial refresh
         self._refresh()
 
-        self._win.Show()
-        wx.CallAfter(self._win.Raise)
+        win.Show()
+        wx.CallAfter(win.Raise)
 
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
         if event.GetKeyCode() == wx.WXK_ESCAPE:
