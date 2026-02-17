@@ -39,6 +39,7 @@ jobs:
       - name: Install dependencies (wxPython excluded — needs native GUI libs)
         run: |
           pip install pyright
-          pip install $(grep -v wxPython requirements.txt)
+          grep -v wxPython requirements.txt > /tmp/req-ci.txt
+          pip install -r /tmp/req-ci.txt
       - name: Pyright
         run: pyright acb_sync/
